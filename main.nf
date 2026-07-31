@@ -92,9 +92,22 @@ if (!params.containsKey('exclude_chimeric'))           params.exclude_chimeric =
 // `params.gatk_docker ?: 'broadinstitute/gatk:4.5.0.0'` convention.
 //if (!params.containsKey('container__mutect1_pipeline')) params.container__mutect1_pipeline = null
 
-def NO_FILE = file("${workflow.projectDir}/assets/NO_FILE")
-new File("${workflow.projectDir}/assets").mkdirs()
-if (!NO_FILE.exists()) { NO_FILE.text = '' }
+def assetsDir = new File("${workflow.projectDir}/assets")
+assetsDir.mkdirs()
+
+def makeNoFile = { String name ->
+    def f = file("${workflow.projectDir}/assets/NO_${name}")
+    if (!f.exists()) {
+        f.text = ''
+    }
+    return f
+}
+
+def NO_TARGET_LIST  = makeNoFile('TARGET_LIST')
+def NO_DBSNP        = makeNoFile('DBSNP')
+def NO_COSMIC       = makeNoFile('COSMIC')
+def NO_RG_BLACKLIST = makeNoFile('RG_BLACKLIST')
+def NO_NORMAL_PANEL = makeNoFile('NORMAL_PANEL')
 
 // ---------------------------------------------------------------------------
 // PROCESSES
@@ -195,7 +208,7 @@ process SPLIT_INTERVALS {
     fi
 
     target_arg=""
-    if [ "!{target_list}" != "NO_FILE" ]; then
+    if [ "!{target_list}" != "NO_TARGET_LIST" ]; then
         target_arg="-target_list !{target_list}"
     fi
 
@@ -237,9 +250,7 @@ process MUTECT1 {
     path ref_fai
     path ref_dict
     path dbsnp
-    path dbsnp_idx
     path cosmic
-    path cosmic_idx
     path readGroupBlacklist
     path normalPanel
 
@@ -288,16 +299,16 @@ process MUTECT1 {
     java_mem_mb=!{task.memory.toMega() - 1024}
 
     extra_args=""
-    if [ "!{dbsnp}" != "NO_FILE" ]; then
+    if [ "!{dbsnp}" != "NO_DBSNP" ]; then
         extra_args="$extra_args --dbsnp !{dbsnp}"
     fi
-    if [ "!{cosmic}" != "NO_FILE" ]; then
+    if [ "!{cosmic}" != "NO_COSMIC" ]; then
         extra_args="$extra_args --cosmic !{cosmic}"
     fi
-    if [ "!{readGroupBlacklist}" != "NO_FILE" ]; then
+    if [ "!{readGroupBlacklist}" != "NO_RG_BLACKLIST" ]; then
         extra_args="$extra_args --read_group_black_list !{readGroupBlacklist}"
     fi
-    if [ "!{normalPanel}" != "NO_FILE" ]; then
+    if [ "!{normalPanel}" != "NO_NORMAL_PANEL" ]; then
         extra_args="$extra_args --normal_panel !{normalPanel}"
     fi
     if [ "!{params.force_calling}" == "true" ]; then
@@ -438,13 +449,25 @@ workflow {
     ref_fasta     = file(params.ref_fasta, checkIfExists: true)
     ref_fai  = file(params.ref_fai, checkIfExists: true)
     ref_dict = file(params.ref_dict, checkIfExists: true)
-    target_list  = params.target_list ? file(params.target_list, checkIfExists: true) : NO_FILE
-    dbsnp        = params.dbsnp       ? file(params.dbsnp, checkIfExists: true)       : NO_FILE
-    dbsnp_idx    = params.dbsnp_idx   ? file(params.dbsnp_idx, checkIfExists: true)   : NO_FILE
-    cosmic       = params.cosmic      ? file(params.cosmic, checkIfExists: true)      : NO_FILE
-    cosmic_idx   = params.cosmic_idx  ? file(params.cosmic_idx, checkIfExists: true)  : NO_FILE
-    rgBlacklist  = params.read_group_blacklist ? file(params.read_group_blacklist, checkIfExists: true) : NO_FILE
-    normalPanel  = params.normal_panel ? file(params.normal_panel, checkIfExists: true) : NO_FILE
+    target_list = params.target_list
+        ? file(params.target_list, checkIfExists: true)
+        : NO_TARGET_LIST
+
+    dbsnp = params.dbsnp
+        ? file(params.dbsnp, checkIfExists: true)
+        : NO_DBSNP
+
+    cosmic = params.cosmic
+        ? file(params.cosmic, checkIfExists: true)
+        : NO_COSMIC
+
+    rgBlacklist = params.read_group_blacklist
+        ? file(params.read_group_blacklist, checkIfExists: true)
+        : NO_RG_BLACKLIST
+
+    normalPanel = params.normal_panel
+        ? file(params.normal_panel, checkIfExists: true)
+        : NO_NORMAL_PANEL
 
     runs_ch = Channel.fromList(params.mutect1_runs).map { run ->
         tuple(
@@ -486,7 +509,7 @@ workflow {
     MUTECT1(
         mutect1_inputs, normal_bam, normal_bai,
         ref_fasta, ref_fai, ref_dict,
-        dbsnp, dbsnp_idx, cosmic, cosmic_idx,
+        dbsnp, cosmic,
         rgBlacklist, normalPanel
     )
 
