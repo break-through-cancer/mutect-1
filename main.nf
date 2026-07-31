@@ -105,7 +105,7 @@ if (!NO_FILE.exists()) { NO_FILE.text = '' }
 process CONTEST {
     tag "${pairName}"
     label 'process_high'
-    container "ghcr.io/jchen1095/contest:latest"
+    container "ghcr.io/jchen1095/contest:1.0.0"
     errorStrategy 'retry'
     maxRetries 3
 
@@ -169,7 +169,7 @@ process CONTEST {
 process SPLIT_INTERVALS {
     tag "${pairName}"
     label 'process_low'
-    container "ghcr.io/jchen1095/split_intervals:latest"
+    container "ghcr.io/jchen1095/split_intervals:v46"
     errorStrategy 'retry'
     maxRetries 4
 
@@ -224,7 +224,7 @@ process SPLIT_INTERVALS {
 process MUTECT1 {
     tag "${pairName}:${task.index}"
     label 'process_medium'
-    container "ghcr.io/jchen1095/mutect_1_getzlab:latest"
+    container "ghcr.io/jchen1095/mutect_1_getzlab:v35"
     stageInMode 'symlink'
     errorStrategy 'retry'
     maxRetries 3
@@ -344,7 +344,7 @@ process MUTECT1 {
 process GATHER_AND_FILTER {
     tag "${pairName}"
     label 'process_medium'
-    container "ghcr.io/jchen1095/mutect_1_getzlab:latest"
+    container "ghcr.io/jchen1095/mutect_1_getzlab:v35"
     publishDir "${params.outdir}/${pairName}", mode: 'copy'
     errorStrategy 'retry'
     maxRetries 2
