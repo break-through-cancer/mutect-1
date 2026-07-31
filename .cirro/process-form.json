@@ -1,0 +1,174 @@
+{
+  "form": {
+    "title": "MuTect1",
+    "type": "object",
+    "properties": {
+      "ref": {
+        "title": "Reference genome",
+        "description": "Reference genome build. The selected build must match the FASTA, dictionary, indexes, annotation VCFs, and BAM alignment build.",
+        "type": "string",
+        "enum": [
+          "hg38",
+          "hg19"
+        ],
+        "default": "hg38"
+      },
+      "ref_fasta": {
+        "title": "Reference FASTA",
+        "description": "Reference genome FASTA used by MuTect1.",
+        "type": "string",
+        "multiple": false,
+        "pathType": "reference",
+        "file": "**/*",
+        "default": "s3://broad-references/hg38/v0/Homo_sapiens_assembly38.fasta"
+      },
+      "ref_fai": {
+        "title": "Reference FASTA index",
+        "description": "FAI index corresponding to the reference FASTA.",
+        "type": "string",
+        "multiple": false,
+        "pathType": "reference",
+        "file": "**/*",
+        "default": "s3://broad-references/hg38/v0/Homo_sapiens_assembly38.fasta.fai"
+      },
+      "ref_dict": {
+        "title": "Reference sequence dictionary",
+        "description": "Sequence dictionary corresponding to the reference FASTA.",
+        "type": "string",
+        "multiple": false,
+        "pathType": "reference",
+        "file": "**/*",
+        "default": "s3://broad-references/hg38/v0/Homo_sapiens_assembly38.dict"
+      },
+      "scatter_count": {
+        "title": "Scatter count",
+        "description": "Number of parallel MuTect1 shards. Higher values may reduce wall-clock time but increase scheduling and compute overhead.",
+        "type": "integer",
+        "default": 200,
+        "minimum": 1
+      },
+      "target_list": {
+        "title": "Target intervals",
+        "description": "Optional BED or interval file restricting MuTect1 calling. Leave blank for genome-wide calling.",
+        "type": "string",
+        "multiple": false,
+        "pathType": "reference",
+        "file": "**/*"
+      },
+      "contest_target_intervals": {
+        "title": "ContEst target intervals",
+        "description": "Optional target interval file used by ContEst. ContEst runs only when this, SNP6 BED, and HapMap VCF are all supplied.",
+        "type": "string",
+        "multiple": false,
+        "pathType": "reference",
+        "file": "**/*"
+      },
+      "snp6_bed": {
+        "title": "SNP6 BED",
+        "description": "Optional SNP6 loci BED used by ContEst.",
+        "type": "string",
+        "multiple": false,
+        "pathType": "reference",
+        "file": "**/*"
+      },
+      "hapmap_vcf": {
+        "title": "HapMap VCF",
+        "description": "Optional HapMap VCF used by ContEst.",
+        "type": "string",
+        "multiple": false,
+        "pathType": "reference",
+        "file": "**/*"
+      },
+      "fracContam": {
+        "title": "Fallback contamination fraction",
+        "description": "Contamination fraction passed to MuTect1 when the full ContEst input set is not supplied.",
+        "type": "number",
+        "default": 0.01,
+        "minimum": 0,
+        "maximum": 1
+      },
+      "dbsnp": {
+        "title": "dbSNP VCF",
+        "description": "Optional dbSNP VCF for MuTect1 annotation.",
+        "type": "string",
+        "multiple": false,
+        "pathType": "reference",
+        "file": "**/*"
+      },
+      "dbsnp_idx": {
+        "title": "dbSNP index",
+        "description": "Index corresponding to the dbSNP VCF.",
+        "type": "string",
+        "multiple": false,
+        "pathType": "reference",
+        "file": "**/*"
+      },
+      "cosmic": {
+        "title": "COSMIC VCF",
+        "description": "Optional COSMIC VCF for MuTect1 annotation.",
+        "type": "string",
+        "multiple": false,
+        "pathType": "reference",
+        "file": "**/*"
+      },
+      "cosmic_idx": {
+        "title": "COSMIC index",
+        "description": "Index corresponding to the COSMIC VCF.",
+        "type": "string",
+        "multiple": false,
+        "pathType": "reference",
+        "file": "**/*"
+      },
+      "read_group_blacklist": {
+        "title": "Read-group blacklist",
+        "description": "Optional file listing read groups that MuTect1 should ignore.",
+        "type": "string",
+        "multiple": false,
+        "pathType": "dataset",
+        "file": "**/*"
+      },
+      "normal_panel": {
+        "title": "Panel of normals",
+        "description": "Optional MuTect1-compatible panel-of-normals file.",
+        "type": "string",
+        "multiple": false,
+        "pathType": "reference",
+        "file": "**/*"
+      },
+      "downsample": {
+        "title": "Downsample coverage",
+        "description": "Maximum coverage used by MuTect1 downsampling.",
+        "type": "integer",
+        "default": 99999,
+        "minimum": 1
+      },
+      "max_mismatch_baseq_sum": {
+        "title": "Maximum mismatch base-quality sum",
+        "description": "MuTect1 maximum mismatch base-quality sum threshold.",
+        "type": "integer",
+        "default": 100,
+        "minimum": 0
+      },
+      "force_calling": {
+        "title": "Enable force calling",
+        "description": "Enable MuTect1 force-calling behavior configured by the pipeline.",
+        "type": "boolean",
+        "default": false
+      },
+      "exclude_chimeric": {
+        "title": "Exclude chimeric reads",
+        "description": "Exclude chimeric read pairs during MuTect1 calling.",
+        "type": "boolean",
+        "default": false
+      }
+    },
+    "required": [
+      "ref",
+      "ref_fasta",
+      "ref_fai",
+      "ref_dict",
+      "scatter_count"
+    ]
+  },
+  "ui": {}
+}
