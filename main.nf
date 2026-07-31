@@ -169,7 +169,7 @@ process CONTEST {
 process SPLIT_INTERVALS {
     tag "${pairName}"
     label 'process_low'
-    container "ghcr.io/jchen1095/split_intervals:v46"
+    container "ghcr.io/jchen1095/split_intervals:v48"
     errorStrategy 'retry'
     maxRetries 4
 
