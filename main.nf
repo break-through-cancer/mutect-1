@@ -237,7 +237,7 @@ process SPLIT_INTERVALS {
 process MUTECT1 {
     tag "${pairName}:${task.index}"
     label 'process_medium'
-    container "ghcr.io/jchen1095/mutect_1_getzlab:v35"
+    container "ghcr.io/jchen1095/mutect_1_getzlab:v36"
     stageInMode 'symlink'
     errorStrategy 'retry'
     maxRetries 3
@@ -355,7 +355,7 @@ process MUTECT1 {
 process GATHER_AND_FILTER {
     tag "${pairName}"
     label 'process_medium'
-    container "ghcr.io/jchen1095/mutect_1_getzlab:v35"
+    container "ghcr.io/jchen1095/mutect_1_getzlab:v36"
     publishDir "${params.outdir}/${pairName}", mode: 'copy'
     errorStrategy 'retry'
     maxRetries 2
