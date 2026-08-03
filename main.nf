@@ -383,11 +383,12 @@ process GATHER_AND_FILTER {
     python3 - <<PYCODE
 vcf_file_in = "!{pairName}.MuTect1.orig.vcf"
 vcf_file_out = "!{pairName}.MuTect1.vcf"
+
 with open(vcf_file_in) as f_in, open(vcf_file_out, 'w') as f_out:
     for line in f_in:
         if line.startswith('#CHROM'):
-            f_out.write('##normal_sample=!{normalSampleName}\n')
-            f_out.write('##tumor_sample=!{tumorSampleName}\n')
+            f_out.write('##normal_sample=!{normalSampleName}\\n')
+            f_out.write('##tumor_sample=!{tumorSampleName}\\n')
         f_out.write(line)
 PYCODE
 
