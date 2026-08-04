@@ -82,6 +82,7 @@ if (!params.containsKey('cosmic'))                     params.cosmic = null
 if (!params.containsKey('cosmic_idx'))                 params.cosmic_idx = null
 if (!params.containsKey('read_group_blacklist'))       params.read_group_blacklist = null
 if (!params.containsKey('normal_panel'))               params.normal_panel = null
+if (!params.containsKey('normal_panel_idx'))           params.normal_panel_idx = null
 if (!params.containsKey('downsample'))                 params.downsample = 99999
 if (!params.containsKey('max_mismatch_baseq_sum'))     params.max_mismatch_baseq_sum = 100
 if (!params.containsKey('force_calling'))              params.force_calling = false
@@ -253,6 +254,7 @@ process MUTECT1 {
     path cosmic
     path readGroupBlacklist
     path normalPanel
+    path normalPanelIdx
 
     output:
     // env() captures the named bash variable's value as left at the end of
@@ -466,9 +468,8 @@ workflow {
         ? file(params.read_group_blacklist, checkIfExists: true)
         : NO_RG_BLACKLIST
 
-    normalPanel = params.normal_panel
-        ? file(params.normal_panel, checkIfExists: true)
-        : NO_NORMAL_PANEL
+    normalPanel     = params.normal_panel     ? file(params.normal_panel, checkIfExists: true)     : NO_FILE
+    normalPanelIdx  = params.normal_panel_idx ? file(params.normal_panel_idx, checkIfExists: true) : NO_FILE
 
     runs_ch = Channel.fromList(params.mutect1_runs).map { run ->
         tuple(
@@ -511,7 +512,7 @@ workflow {
         mutect1_inputs, normal_bam, normal_bai,
         ref_fasta, ref_fai, ref_dict,
         dbsnp, cosmic,
-        rgBlacklist, normalPanel
+        rgBlacklist, normalPanel, normalPanelIdx
     )
 
     // ---- gather: group shards back by tumor sample, merge + filter ----------

@@ -93,7 +93,8 @@
         "type": "string",
         "multiple": false,
         "pathType": "reference",
-        "file": "**/*"
+        "file": "**/*",
+        "default": "s3://broad-references/hg38/v0/Homo_sapiens_assembly38.dbsnp138.vcf"
       },
       "dbsnp_idx": {
         "title": "dbSNP index",
@@ -101,7 +102,8 @@
         "type": "string",
         "multiple": false,
         "pathType": "reference",
-        "file": "**/*"
+        "file": "**/*",
+        "default": "s3://broad-references/hg38/v0/Homo_sapiens_assembly38.dbsnp138.vcf.idx"
       },
       "cosmic": {
         "title": "COSMIC VCF",
@@ -159,7 +161,7 @@
         "title": "Exclude chimeric reads",
         "description": "Exclude chimeric read pairs during MuTect1 calling.",
         "type": "boolean",
-        "default": false
+        "default": true
       }
     },
     "required": [
