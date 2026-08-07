@@ -108,6 +108,7 @@ def NO_DBSNP        = makeNoFile('DBSNP')
 def NO_COSMIC       = makeNoFile('COSMIC')
 def NO_RG_BLACKLIST = makeNoFile('RG_BLACKLIST')
 def NO_NORMAL_PANEL = makeNoFile('NORMAL_PANEL')
+def NO_NORMAL_PANEL_IDX = makeNoFile('NORMAL_PANEL_IDX')
 
 // ---------------------------------------------------------------------------
 // PROCESSES
