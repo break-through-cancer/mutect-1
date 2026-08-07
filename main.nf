@@ -127,11 +127,11 @@ process CONTEST {
     tuple val(pairName), path(t_bam), path(t_bai)
     path normal_bam
     path normal_bai
-    path targetIntervals
+    path targetIntervals, name: 'contest_targets.interval_list'
     path ref_fasta
     path ref_fai
     path ref_dict
-    path snp6Bed
+    path snp6Bed, name: 'snp6_targets.interval_list'
     path hapmapVcf
 
     output:
