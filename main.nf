@@ -467,8 +467,8 @@ workflow {
         ? file(params.read_group_blacklist, checkIfExists: true)
         : NO_RG_BLACKLIST
 
-    normalPanel     = params.normal_panel     ? file(params.normal_panel, checkIfExists: true)     : NO_FILE
-    normalPanelIdx  = params.normal_panel_idx ? file(params.normal_panel_idx, checkIfExists: true) : NO_FILE
+    normalPanel     = params.normal_panel     ? file(params.normal_panel, checkIfExists: true)     : NO_NORMAL_PANEL
+    normalPanelIdx  = params.normal_panel_idx ? file(params.normal_panel_idx, checkIfExists: true) : NO_NORMAL_PANEL_IDX
 
     runs_ch = Channel.fromList(params.mutect1_runs).map { run ->
         tuple(
