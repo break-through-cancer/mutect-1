@@ -114,6 +114,36 @@ def NO_NORMAL_PANEL_IDX = makeNoFile('NORMAL_PANEL_IDX')
 // PROCESSES
 // ---------------------------------------------------------------------------
 
+// Index the ContEst population-frequency VCF once per workflow run.
+// The resulting VCF + .tbi tuple is reused by every CONTEST task.
+process INDEX_CONTEST_VCF {
+    tag "ContEst germline resource"
+    label 'process_low'
+    container "ghcr.io/jchen1095/contest:1.0.0"
+    errorStrategy 'retry'
+    maxRetries 2
+
+    input:
+    path hapmapVcf
+
+    output:
+    tuple path(hapmapVcf), path("${hapmapVcf}.tbi"), emit: indexed_vcf
+
+    shell:
+    '''
+    set -euxo pipefail
+
+    command -v tabix >/dev/null 2>&1 || {
+        echo "ERROR: tabix is not installed in the ContEst container" >&2
+        exit 1
+    }
+
+    tabix -f -p vcf !{hapmapVcf}
+    test -s !{hapmapVcf}.tbi
+    '''
+}
+
+
 // Port of getzlab's ContEst task, run once per tumor sample against the
 // shared normal.
 process CONTEST {
@@ -132,7 +162,7 @@ process CONTEST {
     path ref_fai
     path ref_dict
     path snp6Bed, name: 'snp6_targets.interval_list'
-    path hapmapVcf
+    tuple path(hapmapVcf), path(hapmapVcfIndex)
 
     output:
     tuple val(pairName), path('fraction_contamination.txt'), emit: frac
@@ -481,12 +511,16 @@ workflow {
 
     // ---- contamination estimate: ContEst per tumor against the shared normal ----
     if (params.contest_target_intervals && params.snp6_bed && params.hapmap_vcf) {
+        // Index this shared resource once, then reuse the VCF + index for every tumor.
+        contest_hapmap_vcf = file(params.hapmap_vcf, checkIfExists: true)
+        INDEX_CONTEST_VCF(contest_hapmap_vcf)
+
         CONTEST(
             runs_ch, normal_bam, normal_bai,
             file(params.contest_target_intervals, checkIfExists: true),
             ref_fasta, ref_fai, ref_dict,
             file(params.snp6_bed, checkIfExists: true),
-            file(params.hapmap_vcf, checkIfExists: true)
+            INDEX_CONTEST_VCF.out.indexed_vcf
         )
         frac_ch = CONTEST.out.frac.map { pairName, fracFile -> tuple(pairName, fracFile.text.trim() as Float) }
     } else {
