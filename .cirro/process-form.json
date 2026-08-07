@@ -105,22 +105,6 @@
         "file": "**/*",
         "default": "s3://broad-references/hg38/v0/Homo_sapiens_assembly38.dbsnp138.vcf.idx"
       },
-      "cosmic": {
-        "title": "COSMIC VCF",
-        "description": "Optional COSMIC VCF for MuTect1 annotation.",
-        "type": "string",
-        "multiple": false,
-        "pathType": "reference",
-        "file": "**/*"
-      },
-      "cosmic_idx": {
-        "title": "COSMIC index",
-        "description": "Index corresponding to the COSMIC VCF.",
-        "type": "string",
-        "multiple": false,
-        "pathType": "reference",
-        "file": "**/*"
-      },
       "read_group_blacklist": {
         "title": "Read-group blacklist",
         "description": "Optional file listing read groups that MuTect1 should ignore.",

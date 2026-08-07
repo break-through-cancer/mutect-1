@@ -77,7 +77,6 @@ if (!params.containsKey('fracContam'))                 params.fracContam = 0.01
 // dbsnp/cosmic, which NeoDisc treats as mandatory -- kept optional here to
 // match getzlab's more flexible calling config)
 if (!params.containsKey('dbsnp'))                      params.dbsnp = null
-if (!params.containsKey('dbsnp_idx'))                  params.dbsnp_idx = null
 if (!params.containsKey('cosmic'))                     params.cosmic = null
 if (!params.containsKey('cosmic_idx'))                 params.cosmic_idx = null
 if (!params.containsKey('read_group_blacklist'))       params.read_group_blacklist = null
