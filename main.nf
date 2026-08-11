@@ -195,7 +195,7 @@ process CONTEST {
         --min_genotype_depth 30 \
         --min_genotype_ratio 0.8
 
-    extract_contamination.py \
+    python /usr/local/bin/extract_contamination.py \
         contamination.af.txt \
         fraction_contamination.txt \
         contamination_validation.array_free.txt \
