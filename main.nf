@@ -132,6 +132,7 @@ def makeNoFile = { String name ->
 }
 
 def NO_TARGET_LIST      = makeNoFile('TARGET_LIST')
+def NO_SNP6_BED         = makeNoFile('SNP6_BED')
 def NO_DBSNP            = makeNoFile('DBSNP')
 def NO_DBSNP_IDX        = makeNoFile('DBSNP_IDX')
 def NO_COSMIC           = makeNoFile('COSMIC')
@@ -222,6 +223,18 @@ process CONTEST {
 
     java_mem_mb=!{task.memory.toMega() - 1024}
 
+    # snp6Bed is optional -- it exists to restrict ContEst to positions also
+    # present on an Affymetrix SNP6 array, which only matters if you're
+    # cross-checking against real SNP6 array genotyping data (this pipeline
+    # doesn't do that reconciliation step). Intersecting with it unconditionally
+    # is what starved a real run down to 8345bp / 194 informative sites and
+    # produced a statistically meaningless contamination estimate -- so this
+    # is only applied if a real snp6_bed was actually supplied.
+    snp6_args=""
+    if [ "!{snp6Bed}" != "NO_SNP6_BED" ]; then
+        snp6_args="-L !{snp6Bed} -isr INTERSECTION"
+    fi
+
     /usr/local/jre1.7.0_71/bin/java \
         -Xmx${java_mem_mb}m \
         -Djava.io.tmpdir=$PWD \
@@ -230,8 +243,7 @@ process CONTEST {
         -I:eval !{t_bam} \
         -I:genotype !{normal_bam} \
         -L !{targetIntervals} \
-        -L !{snp6Bed} \
-        -isr INTERSECTION \
+        $snp6_args \
         -R !{ref_fasta} \
         -l INFO \
         -pf !{hapmapVcf} \
@@ -872,9 +884,13 @@ workflow {
     // ContEst
     // -----------------------------------------------------------------------
 
+    // snp6_bed is genuinely optional (see CONTEST's shell block) -- only
+    // contest_target_intervals + hapmap_vcf actually gate whether ContEst
+    // runs at all. Unconditionally intersecting with a SNP6 bed shrank a
+    // real run down to 194 informative sites -- see the FIX note above
+    // CONTEST -- so don't require it here either.
     if (
         params.contest_target_intervals &&
-        params.snp6_bed &&
         params.hapmap_vcf
     ) {
 
@@ -888,6 +904,11 @@ workflow {
             contest_hapmap_vcf
         )
 
+        snp6Bed =
+            params.snp6_bed
+                ? file(params.snp6_bed, checkIfExists: true)
+                : NO_SNP6_BED
+
         CONTEST(
             runs_ch,
             normal_bam,
@@ -899,10 +920,7 @@ workflow {
             ref_fasta,
             ref_fai,
             ref_dict,
-            file(
-                params.snp6_bed,
-                checkIfExists: true
-            ),
+            snp6Bed,
             INDEX_CONTEST_VCF.out.indexed_vcf
         )
 
