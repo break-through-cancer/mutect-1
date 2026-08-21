@@ -992,79 +992,79 @@ workflow {
     // Join intervals with tumor + contamination data
     // -----------------------------------------------------------------------
 
-    mutect1_inputs =
-        shards_per_pair
-            .combine(
-                runs_with_frac,
-                by: 0
-            )
-            .map {
-                pairName,
-                intervalFile,
-                t_bam,
-                t_bai,
-                fracContam ->
+    // mutect1_inputs =
+    //     shards_per_pair
+    //         .combine(
+    //             runs_with_frac,
+    //             by: 0
+    //         )
+    //         .map {
+    //             pairName,
+    //             intervalFile,
+    //             t_bam,
+    //             t_bai,
+    //             fracContam ->
 
-                tuple(
-                    pairName,
-                    intervalFile,
-                    fracContam,
-                    t_bam,
-                    t_bai
-                )
-            }
-
-
-    // -----------------------------------------------------------------------
-    // MuTect1
-    // -----------------------------------------------------------------------
-
-    MUTECT1(
-        mutect1_inputs,
-
-        normal_bam,
-        normal_bai,
-
-        ref_fasta,
-        ref_fai,
-        ref_dict,
-
-        dbsnp,
-        dbsnpIdx,
-
-        cosmic,
-        cosmicIdx,
-
-        rgBlacklist,
-        normalPanel,
-        normalPanelIdx
-    )
+    //             tuple(
+    //                 pairName,
+    //                 intervalFile,
+    //                 fracContam,
+    //                 t_bam,
+    //                 t_bai
+    //             )
+    //         }
 
 
-    // -----------------------------------------------------------------------
-    // Gather
-    // -----------------------------------------------------------------------
+    // // -----------------------------------------------------------------------
+    // // MuTect1
+    // // -----------------------------------------------------------------------
 
-    gathered =
-        MUTECT1
-            .out
-            .shard
-            .groupTuple(
-                by: [0, 1, 2]
-            )
+    // MUTECT1(
+    //     mutect1_inputs,
 
-    // tuple(
-    //     pairName,
-    //     tumorSampleName,
-    //     normalSampleName,
-    //     [call_stats...],
-    //     [vcf...],
-    //     [log...]
+    //     normal_bam,
+    //     normal_bai,
+
+    //     ref_fasta,
+    //     ref_fai,
+    //     ref_dict,
+
+    //     dbsnp,
+    //     dbsnpIdx,
+
+    //     cosmic,
+    //     cosmicIdx,
+
+    //     rgBlacklist,
+    //     normalPanel,
+    //     normalPanelIdx
     // )
 
-    GATHER_AND_FILTER(
-        gathered
-    )
+
+    // // -----------------------------------------------------------------------
+    // // Gather
+    // // -----------------------------------------------------------------------
+
+    // gathered =
+    //     MUTECT1
+    //         .out
+    //         .shard
+    //         .groupTuple(
+    //             by: [0, 1, 2]
+    //         )
+
+    // // tuple(
+    // //     pairName,
+    // //     tumorSampleName,
+    // //     normalSampleName,
+    // //     [call_stats...],
+    // //     [vcf...],
+    // //     [log...]
+    // // )
+
+    // GATHER_AND_FILTER(
+    //     gathered
+    // )
 }
 
 // #!/usr/bin/env nextflow
