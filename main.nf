@@ -267,7 +267,28 @@ process CONTEST {
     '''
 }
 
+process LIFTOVER {
+    tag "Twist hg19 -> hg38"
+    label 'process_low'
+    container "broadinstitute/gatk:4.5.0.0"
+    publishDir "${params.outdir}/reference", mode: 'copy'
 
+    input:
+    path interval_list
+    path chain_file
+
+    output:
+    path("${interval_list.baseName}.hg38.interval_list"), emit: lifted
+
+    shell:
+    '''
+    liftOver !{interval_list} !{chain_file} \
+      !{interval_list.baseName}.hg38.interval_list \
+      !{interval_list.baseName}.hg19.unmapped
+    
+    test -s !{interval_list.baseName}.hg38.interval_list
+    '''
+}
 // ---------------------------------------------------------------------------
 // SPLIT INTERVALS
 // ---------------------------------------------------------------------------
@@ -714,6 +735,23 @@ workflow {
         error "Missing required param: ref_fasta"
     }
 
+
+    // ... existing normal_bam, ref_fasta loading code ...
+
+    // -----------------------------------------------------------------------
+    // Optional target list + liftover
+    // -----------------------------------------------------------------------
+
+    target_list_raw =
+        params.target_list
+            ? file(params.target_list, checkIfExists: true)
+            : NO_TARGET_LIST
+
+    // Optionally liftover hg19 intervals to hg38
+    target_list =
+        params.chain_file
+            ? LIFTOVER(target_list_raw, file(params.chain_file, checkIfExists: true)).lifted
+            : target_list_raw
 
     // -----------------------------------------------------------------------
     // Shared matched normal
