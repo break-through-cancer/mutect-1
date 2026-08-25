@@ -298,7 +298,7 @@ process SPLIT_INTERVALS {
     set -euxo pipefail
 
     # Hardcoded for Ensembl/numeric style interval lists (Twist_HCEP_V1)
-    selected_chrs=$(printf "%s," {1..22} X Y | sed 's/,$//')
+    selected_chrs=$(printf "chr%s," {1..22} X Y | sed 's/,$//')
 
     target_arg=""
 
