@@ -297,17 +297,8 @@ process SPLIT_INTERVALS {
     '''
     set -euxo pipefail
 
-    # 1. Determine whether the interval file uses 'chr' prefix notation
-    # Filter out header lines starting with '@' and inspect column 1 of the first data record
-    FIRST_CHR=$(grep -v '^@' "!{target_list}" | head -n 1 | cut -f 1)
-
-    if [[ "$FIRST_CHR" =~ ^chr ]]; then
-        # UCSC Naming (e.g., chr1, chr2, ..., chrX, chrY)
-        selected_chrs=$(printf "chr%s," {1..22} X Y | sed 's/,$//')
-    else
-        # Ensembl/NCBI Naming (e.g., 1, 2, ..., X, Y)
-        selected_chrs=$(printf "%s," {1..22} X Y | sed 's/,$//')
-    fi
+    # Hardcoded for Ensembl/numeric style interval lists (Twist_HCEP_V1)
+    selected_chrs=$(printf "%s," {1..22} X Y | sed 's/,$//')
 
     target_arg=""
 
@@ -328,7 +319,6 @@ process SPLIT_INTERVALS {
     done
     '''
 }
-
 
 // ---------------------------------------------------------------------------
 // MUTECT1
