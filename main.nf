@@ -297,13 +297,16 @@ process SPLIT_INTERVALS {
     '''
     set -euxo pipefail
 
-    if [[ "!{ref}" == "hg38" ]]; then
+    # 1. Determine whether the interval file uses 'chr' prefix notation
+    # Filter out header lines starting with '@' and inspect column 1 of the first data record
+    FIRST_CHR=$(grep -v '^@' "!{target_list}" | head -n 1 | cut -f 1)
+
+    if [[ "$FIRST_CHR" =~ ^chr ]]; then
+        # UCSC Naming (e.g., chr1, chr2, ..., chrX, chrY)
         selected_chrs=$(printf "chr%s," {1..22} X Y | sed 's/,$//')
-    elif [[ "!{ref}" == "hg19" ]]; then
-        selected_chrs=$(printf "%s," {1..22} X Y | sed 's/,$//')
     else
-        echo "unrecognized reference: !{ref}" >&2
-        exit 1
+        # Ensembl/NCBI Naming (e.g., 1, 2, ..., X, Y)
+        selected_chrs=$(printf "%s," {1..22} X Y | sed 's/,$//')
     fi
 
     target_arg=""
