@@ -4,76 +4,14 @@
  * on-prem/HPC, fixed per-chromosome scatter) with the getzlab
  * MuTect1_Scatter_Gather.wdl (Cromwell, cloud-native, dynamic N-way scatter
  * + ContEst contamination estimation), packaged to match the conventions of
- * an existing production Cirro Mutect2 pipeline (see preprocess.py):
+ * an existing production Cirro Mutect2 pipeline (see preprocess.py).
  *
- *   - Sample discovery happens OUTSIDE Nextflow, via a Cirro dataset
- *     preprocessing hook (preprocess.py) that injects params.mutect1_runs --
- *     not a Nextflow-side sample-sheet CSV. This is the same
- *     cirro.helpers.preprocess_dataset.PreprocessDataset pattern the
- *     Mutect2 pipeline already uses in production.
- *   - Shared-normal model: one normal BAM, shared across every tumor sample
- *     in the dataset (confirmed choice -- matches the Mutect2 pipeline's
- *     active behavior, not its single-sample variant). This removes the
- *     need for any tumor-only/paired branching: every run has a normal by
- *     construction, so it's a broadcast value like ref_fasta, not something
- *     requiring a per-row join.
- *   - Sample names are derived from BAM header SM tags at runtime (samtools
- *     + awk, same idiom as the Mutect2 wrapper's tumor/normal SM
- *     extraction) rather than threaded through as separate params.
- *   - Scatter strategy: getzlab's dynamic N-way BAM-derived split (not
- *     NeoDisc's fixed 24-way per-chromosome BAITBYCHR split, and not the
- *     Mutect2 pipeline's physical per-shard BAM subsetting via samtools --
- *     MuTect1 shards are given the full BAM restricted with -L, matching
- *     getzlab's original approach; subsetting can be added later if I/O
- *     becomes a bottleneck at scale).
- *   - Filtering: MuTect1's own PASS/REJECT call is the same underlying
- *     filter in both source pipelines (NeoDisc: "drop REJECT"; getzlab:
- *     "keep PASS"). Both outputs are produced under each pipeline's own
- *     filename convention, plus getzlab's TiN-risk call_stats subset.
- *   - NOT included: NeoDisc's multi-caller ensemble MinOverlap filter --
- *     that needs HaplotypeCaller/Mutect2/Varscan2 output too and isn't part
- *     of "the MuTect1 workflow" in either source pipeline.
- *
- * --- Observability fix (this revision) -----------------------------------
- * Two silent data-loss gaps were found and fixed:
- *   1. CONTEST had no publishDir, and only ever emitted the single derived
- *      fraction_contamination.txt -- the raw ContEst table
- *      (contamination.af.txt), the base report, and the array-free
- *      validation file were computed every run and then discarded. This is
- *      exactly the evidence you'd need to catch a bad contamination
- *      estimate (e.g. extract_contamination.py grabbing the wrong row/
- *      population panel out of ContEst's multi-row output). Fixed: CONTEST
- *      now has a publishDir and emits all four files.
- *   2. MUTECT1's per-shard mutect1_shard.log was cat'd to stdout and then
- *      discarded -- never declared as an output, never published. Fixed:
- *      each shard now emits its own log file, and GATHER_AND_FILTER
- *      concatenates every shard's log into one published per-sample log --
- *      the same pattern NeoDisc's own Mutect_v1_calling.sh already used
- *      (`cat ${c}_mutect.log >> ${tumor}_mutect.log`) before this got ported
- *      to Nextflow.
- *   Also added a publishDir to SPLIT_INTERVALS (cheap, and useful for
- *   auditing exactly how a sample's genome was scattered -- e.g. confirming
- *   shard count and boundaries match what you expect).
- *
- * Why this class of bug is Nextflow/Cirro-specific and didn't show up in
- * the original WDL/Terra pipeline: Cromwell + Terra expose a task's full
- * execution directory by default -- every file that ends up in a call's
- * working directory (stdout, stderr, anything written, not just files
- * named in `output {}`) is browsable via Terra's Job Manager / can be
- * pulled straight from the call's GCS path, with no extra configuration.
- * Nextflow's model is the opposite: only files explicitly listed in a
- * process's `output:` block are tracked at all, and even those are only
- * copied somewhere permanent/user-visible if that process has a
- * `publishDir`. Everything else lives in an ephemeral, hash-named work/
- * directory that isn't part of the normal Cirro results view and can be
- * garbage-collected. Porting the WDL to Nextflow didn't carry over Terra's
- * "everything is visible for free" behavior -- each process needs to opt in
- * explicitly, and CONTEST and MUTECT1 never did.
- *
- * Structurally untested -- no `nextflow` binary or registry network access
- * was available while writing this. Hand-reviewed against Nextflow DSL2
- * conventions and against the working Mutect2 pipeline's own idioms, not
- * validated with `nextflow run`.
+ * Adds an upstream duplicate-marking check: BAMs feeding this pipeline were
+ * found to lack MarkDuplicates output (0% flagged as duplicate vs. ~11% in
+ * NeoDisc's own pre-processed BAMs), which silently inflates apparent allele
+ * support and produces excess low-confidence calls. CHECK_DEDUP_STATUS
+ * inspects each BAM (@PG chain + samtools flagstat duplicate count) and only
+ * BAMs found NOT already deduped are routed through MARK_DUPLICATES_SPARK.
  */
 nextflow.enable.dsl = 2
 
@@ -247,14 +185,6 @@ process INDEX_CONTEST_VCF {
 
 // Port of getzlab's ContEst task, run once per tumor sample against the
 // shared normal.
-//
-// FIX: added publishDir + emit the raw ContEst outputs (contamination.af.txt,
-// contamination.base_report.txt, contamination_validation.array_free.txt) in
-// addition to the single derived fraction_contamination.txt. Previously none
-// of this was published anywhere -- the derived fraction was the only thing
-// that (barely) survived past the ephemeral work directory, and the raw
-// table needed to audit *how* that fraction was derived was discarded every
-// run.
 process CONTEST {
     tag "${pairName}"
     label 'process_high'
@@ -294,13 +224,6 @@ process CONTEST {
 
     java_mem_mb=!{task.memory.toMega() - 1024}
 
-    # snp6Bed is optional -- it exists to restrict ContEst to positions also
-    # present on an Affymetrix SNP6 array, which only matters if you're
-    # cross-checking against real SNP6 array genotyping data (this pipeline
-    # doesn't do that reconciliation step). Intersecting with it unconditionally
-    # is what starved a real run down to 8345bp / 194 informative sites and
-    # produced a statistically meaningless contamination estimate -- so this
-    # is only applied if a real snp6_bed was actually supplied.
     snp6_args=""
     if [ "!{snp6Bed}" != "NO_SNP6_BED" ]; then
         snp6_args="-L !{snp6Bed} -isr INTERSECTION"
@@ -342,12 +265,6 @@ process CONTEST {
 // ---------------------------------------------------------------------------
 // SPLIT INTERVALS
 // ---------------------------------------------------------------------------
-//
-// FIX: added publishDir. Cheap, and useful for auditing exactly how a
-// sample's genome was scattered -- e.g. confirming the shard count and total
-// covered bases match what you expect (this is exactly the kind of thing
-// that would have let you catch a WES-vs-WGS scope mismatch immediately
-// instead of inferring it after the fact from shard counts in a log).
 process SPLIT_INTERVALS {
     tag "${pairName}"
     label 'process_low'
@@ -395,13 +312,6 @@ process SPLIT_INTERVALS {
 // ---------------------------------------------------------------------------
 // MUTECT1
 // ---------------------------------------------------------------------------
-//
-// FIX: now emits its per-shard log (renamed to include pairName + task.index
-// so it doesn't collide with other shards/samples once gathered) instead of
-// just cat-ing it to stdout and discarding it. Previously this log -- which
-// would show GATK3's own internal warnings, retries, and effective
-// parameter echoes for that specific shard -- only ever existed in
-// Nextflow's ephemeral work directory.
 process MUTECT1 {
     tag "${pairName}:${task.index}"
     label 'process_medium'
@@ -443,10 +353,6 @@ process MUTECT1 {
     '''
     set -euxo pipefail
 
-    # -----------------------------------------------------------------------
-    # BAM indexes
-    # -----------------------------------------------------------------------
-
     if [ ! -f !{t_bam}.bai ]; then
         ln -s !{t_bai} !{t_bam}.bai
     fi
@@ -454,11 +360,6 @@ process MUTECT1 {
     if [ ! -f !{normal_bam}.bai ]; then
         ln -s !{normal_bai} !{normal_bam}.bai
     fi
-
-
-    # -----------------------------------------------------------------------
-    # Determine sample names from BAM headers
-    # -----------------------------------------------------------------------
 
     tumor_sample=$(samtools view -H !{t_bam} \
         | awk -F'\t' '/^@RG/ {
@@ -507,30 +408,10 @@ process MUTECT1 {
         exit 1
     }
 
-
-    # -----------------------------------------------------------------------
-    # Java memory
-    # -----------------------------------------------------------------------
-
     java_mem_mb=!{task.memory.toMega() - 1024}
-
-
-    # -----------------------------------------------------------------------
-    # Optional MuTect1 inputs
-    # -----------------------------------------------------------------------
 
     extra_args=""
 
-
-    # dbSNP
-    #
-    # Old MuTect/GATK expects the Tribble index beside the VCF using:
-    #
-    #     dbsnp.vcf
-    #     dbsnp.vcf.idx
-    #
-    # Nextflow stages dbsnpIdx separately, so explicitly create the expected
-    # adjacent filename.
     if [ "!{dbsnp}" != "NO_DBSNP" ]; then
 
         if [ "!{dbsnpIdx}" == "NO_DBSNP_IDX" ]; then
@@ -547,11 +428,6 @@ process MUTECT1 {
         extra_args="$extra_args --dbsnp !{dbsnp}"
     fi
 
-
-    # COSMIC
-    #
-    # Same requirement as dbSNP: MuTect1 discovers the Tribble index from
-    # <VCF>.idx, so make sure the staged index has the expected adjacent name.
     if [ "!{cosmic}" != "NO_COSMIC" ]; then
 
         if [ "!{cosmicIdx}" == "NO_COSMIC_IDX" ]; then
@@ -568,30 +444,21 @@ process MUTECT1 {
         extra_args="$extra_args --cosmic !{cosmic}"
     fi
 
-
     if [ "!{readGroupBlacklist}" != "NO_RG_BLACKLIST" ]; then
         extra_args="$extra_args --read_group_black_list !{readGroupBlacklist}"
     fi
-
 
     if [ "!{normalPanel}" != "NO_NORMAL_PANEL" ]; then
         extra_args="$extra_args --normal_panel !{normalPanel}"
     fi
 
-
     if [ "!{params.force_calling}" == "true" ]; then
         extra_args="$extra_args --force_output"
     fi
 
-
     if [ "!{params.exclude_chimeric}" == "true" ]; then
         extra_args="$extra_args --exclude_chimeric_reads"
     fi
-
-
-    # -----------------------------------------------------------------------
-    # Run MuTect1
-    # -----------------------------------------------------------------------
 
     shard_log="!{pairName}.MuTect1.shard.!{task.index}.log"
 
@@ -615,11 +482,6 @@ process MUTECT1 {
 
     cat "$shard_log"
 
-
-    # -----------------------------------------------------------------------
-    # Defensive error checks
-    # -----------------------------------------------------------------------
-
     if grep -Piq '(error)|(killed)|(java\\.lang\\.[a-zA-Z]*(exception|error):)' \
         "$shard_log"
     then
@@ -637,11 +499,6 @@ process MUTECT1 {
 // ---------------------------------------------------------------------------
 // GATHER + FILTER
 // ---------------------------------------------------------------------------
-//
-// FIX: now also receives every shard's log file and concatenates them into
-// one published per-sample log (`${pairName}.MuTect1.log`) -- the same
-// pattern NeoDisc's own Mutect_v1_calling.sh used for its per-chromosome
-// logs before this got ported to Nextflow, just restored.
 process GATHER_AND_FILTER {
     tag "${pairName}"
     label 'process_medium'
@@ -684,22 +541,11 @@ process GATHER_AND_FILTER {
         --FILE_ARRAY_PATH vcf.list \
         !{pairName}.MuTect1.orig.vcf
 
-
-    # -----------------------------------------------------------------------
-    # Concatenate every shard's MuTect1 log into one per-sample log
-    # (NeoDisc's own pattern: `cat ${c}_mutect.log >> ${tumor}_mutect.log`)
-    # -----------------------------------------------------------------------
-
     : > !{pairName}.MuTect1.log
     while IFS= read -r logfile; do
         echo "===== $logfile =====" >> !{pairName}.MuTect1.log
         cat "$logfile" >> !{pairName}.MuTect1.log
     done < log.list
-
-
-    # -----------------------------------------------------------------------
-    # Add tumor/normal metadata
-    # -----------------------------------------------------------------------
 
     python3 - <<PYCODE
 vcf_file_in = "!{pairName}.MuTect1.orig.vcf"
@@ -712,11 +558,6 @@ with open(vcf_file_in) as f_in, open(vcf_file_out, 'w') as f_out:
             f_out.write('##tumor_sample=!{tumorSampleName}\\n')
         f_out.write(line)
 PYCODE
-
-
-    # -----------------------------------------------------------------------
-    # getzlab-style PASS VCF
-    # -----------------------------------------------------------------------
 
     cat \
         <(sed -n '/^#/p' !{pairName}.MuTect1.vcf) \
@@ -734,19 +575,9 @@ PYCODE
         ) \
         > !{pairName}.MuTect1.PASS.vcf
 
-
-    # -----------------------------------------------------------------------
-    # NeoDisc-style "drop REJECT"
-    # -----------------------------------------------------------------------
-
     awk '!(/REJECT/)' \
         !{pairName}.MuTect1.vcf \
         > !{pairName}.mutectv1.final.vcf
-
-
-    # -----------------------------------------------------------------------
-    # TiN-risk call_stats subset
-    # -----------------------------------------------------------------------
 
     awk -F '\t' \
         'NR <= 2 ||
@@ -757,11 +588,6 @@ PYCODE
          $50 == "alt_allele_in_normal,normal_lod"' \
         !{pairName}.MuTect1.call_stats.txt \
         > !{pairName}.PASS+TiNrisk.call_stats.txt
-
-
-    # -----------------------------------------------------------------------
-    # Output assertions
-    # -----------------------------------------------------------------------
 
     test -s !{pairName}.MuTect1.call_stats.txt
     test -s !{pairName}.MuTect1.vcf
@@ -784,6 +610,27 @@ workflow {
     if (!params.ref_fasta) {
         error "Missing required param: ref_fasta"
     }
+
+    // -----------------------------------------------------------------------
+    // Reference + static resources
+    // -----------------------------------------------------------------------
+
+    ref_fasta = file(params.ref_fasta, checkIfExists: true)
+    ref_fai   = file(params.ref_fai,   checkIfExists: true)
+    ref_dict  = file(params.ref_dict,  checkIfExists: true)
+
+    target_list = params.target_list ? file(params.target_list, checkIfExists: true) : NO_TARGET_LIST
+
+    dbsnp    = params.dbsnp     ? file(params.dbsnp,     checkIfExists: true) : NO_DBSNP
+    dbsnpIdx = params.dbsnp_idx ? file(params.dbsnp_idx, checkIfExists: true) : NO_DBSNP_IDX
+
+    cosmic    = params.cosmic     ? file(params.cosmic,     checkIfExists: true) : NO_COSMIC
+    cosmicIdx = params.cosmic_idx ? file(params.cosmic_idx, checkIfExists: true) : NO_COSMIC_IDX
+
+    rgBlacklist = params.read_group_blacklist ? file(params.read_group_blacklist, checkIfExists: true) : NO_RG_BLACKLIST
+
+    normalPanel    = params.normal_panel     ? file(params.normal_panel,     checkIfExists: true) : NO_NORMAL_PANEL
+    normalPanelIdx = params.normal_panel_idx ? file(params.normal_panel_idx, checkIfExists: true) : NO_NORMAL_PANEL_IDX
 
     // -----------------------------------------------------------------------
     // Resolve raw normal + raw tumor paths (no processes called yet)
@@ -868,15 +715,11 @@ workflow {
     normal_bai = final_normal.map { bam, bai -> bai }
 
     runs_ch = already_deduped_tumor.mix(deduped_tumor)
+
     // -----------------------------------------------------------------------
     // ContEst
     // -----------------------------------------------------------------------
 
-    // snp6_bed is genuinely optional (see CONTEST's shell block) -- only
-    // contest_target_intervals + hapmap_vcf actually gate whether ContEst
-    // runs at all. Unconditionally intersecting with a SNP6 bed shrank a
-    // real run down to 194 informative sites -- see the FIX note above
-    // CONTEST -- so don't require it here either.
     if (
         params.contest_target_intervals &&
         params.hapmap_vcf
@@ -942,17 +785,8 @@ workflow {
                 }
     }
 
-
     runs_with_frac =
         runs_ch.join(frac_ch)
-
-    // tuple(
-    //     pairName,
-    //     t_bam,
-    //     t_bai,
-    //     fracContam
-    // )
-
 
     // -----------------------------------------------------------------------
     // Scatter
@@ -969,12 +803,6 @@ workflow {
             .out
             .interval_files
             .transpose()
-
-    // tuple(
-    //     pairName,
-    //     single_interval_file
-    // )
-
 
     // -----------------------------------------------------------------------
     // Join intervals with tumor + contamination data
@@ -1002,7 +830,6 @@ workflow {
                 )
             }
 
-
     // -----------------------------------------------------------------------
     // MuTect1
     // -----------------------------------------------------------------------
@@ -1028,7 +855,6 @@ workflow {
         normalPanelIdx
     )
 
-
     // -----------------------------------------------------------------------
     // Gather
     // -----------------------------------------------------------------------
@@ -1040,15 +866,6 @@ workflow {
             .groupTuple(
                 by: [0, 1, 2]
             )
-
-    // tuple(
-    //     pairName,
-    //     tumorSampleName,
-    //     normalSampleName,
-    //     [call_stats...],
-    //     [vcf...],
-    //     [log...]
-    // )
 
     GATHER_AND_FILTER(
         gathered
