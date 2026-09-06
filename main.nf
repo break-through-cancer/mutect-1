@@ -781,14 +781,12 @@ workflow {
     if (!params.mutect1_runs) {
         error "params.mutect1_runs is empty -- did the Cirro preprocess.py hook run? (see preprocess.py)"
     }
-
     if (!params.ref_fasta) {
         error "Missing required param: ref_fasta"
     }
 
-
     // -----------------------------------------------------------------------
-    // Shared matched normal -- resolve the raw path first
+    // Resolve raw normal + raw tumor paths (no processes called yet)
     // -----------------------------------------------------------------------
 
     params.mutect1_runs.each { run ->
@@ -812,124 +810,6 @@ workflow {
 
     normal_ch = Channel.of(tuple('shared_normal', raw_normal_bam, raw_normal_bai))
 
-    checked_normal = CHECK_DEDUP_STATUS(normal_ch)
-
-    already_deduped_normal =
-        checked_normal.status
-            .filter { name, bam, bai, isDeduped -> isDeduped == 'true' }
-            .map    { name, bam, bai, isDeduped -> tuple(bam, bai) }
-
-    needs_dedup_normal =
-        checked_normal.status
-            .filter { name, bam, bai, isDeduped -> isDeduped == 'false' }
-            .map    { name, bam, bai, isDeduped -> tuple(name, bam, bai) }
-
-    MARK_DUPLICATES_SPARK(needs_dedup_normal)
-
-    final_normal =
-        already_deduped_normal
-            .mix(MARK_DUPLICATES_SPARK.out.dedup_bam.map { name, bam, bai -> tuple(bam, bai) })
-            .first()   // broadcasts this singleton across every MUTECT1/CONTEST call
-
-    normal_bam = final_normal.map { bam, bai -> bam }.first()
-    normal_bai = final_normal.map { bam, bai -> bai }.first()
-
-    // -----------------------------------------------------------------------
-    // Reference
-    // -----------------------------------------------------------------------
-
-    ref_fasta =
-        file(
-            params.ref_fasta,
-            checkIfExists: true
-        )
-
-    ref_fai =
-        file(
-            params.ref_fai,
-            checkIfExists: true
-        )
-
-    ref_dict =
-        file(
-            params.ref_dict,
-            checkIfExists: true
-        )
-
-
-    // -----------------------------------------------------------------------
-    // Optional target list
-    // -----------------------------------------------------------------------
-
-    target_list =
-        params.target_list
-            ? file(params.target_list, checkIfExists: true)
-            : NO_TARGET_LIST
-
-
-    // -----------------------------------------------------------------------
-    // dbSNP + index
-    // -----------------------------------------------------------------------
-
-    dbsnp =
-        params.dbsnp
-            ? file(params.dbsnp, checkIfExists: true)
-            : NO_DBSNP
-
-    dbsnpIdx =
-        params.dbsnp_idx
-            ? file(params.dbsnp_idx, checkIfExists: true)
-            : NO_DBSNP_IDX
-
-
-    // -----------------------------------------------------------------------
-    // COSMIC + index
-    // -----------------------------------------------------------------------
-
-    cosmic =
-        params.cosmic
-            ? file(params.cosmic, checkIfExists: true)
-            : NO_COSMIC
-
-    cosmicIdx =
-        params.cosmic_idx
-            ? file(params.cosmic_idx, checkIfExists: true)
-            : NO_COSMIC_IDX
-
-
-    // -----------------------------------------------------------------------
-    // Other optional resources
-    // -----------------------------------------------------------------------
-
-    rgBlacklist =
-        params.read_group_blacklist
-            ? file(
-                params.read_group_blacklist,
-                checkIfExists: true
-            )
-            : NO_RG_BLACKLIST
-
-    normalPanel =
-        params.normal_panel
-            ? file(
-                params.normal_panel,
-                checkIfExists: true
-            )
-            : NO_NORMAL_PANEL
-
-    normalPanelIdx =
-        params.normal_panel_idx
-            ? file(
-                params.normal_panel_idx,
-                checkIfExists: true
-            )
-            : NO_NORMAL_PANEL_IDX
-
-
-    // -----------------------------------------------------------------------
-    // Tumor runs
-    // -----------------------------------------------------------------------
-
     raw_runs_ch =
         Channel
             .fromList(params.mutect1_runs)
@@ -941,40 +821,53 @@ workflow {
                 )
             }
 
-    checked_tumor = CHECK_DEDUP_STATUS(raw_runs_ch)
+    // -----------------------------------------------------------------------
+    // Dedup check -- ONE call covering the normal + every tumor BAM.
+    // 'shared_normal' as a name value is how we tell the normal apart from
+    // tumor samples after this merges back into a single output stream.
+    // -----------------------------------------------------------------------
+
+    checked_all = CHECK_DEDUP_STATUS(normal_ch.mix(raw_runs_ch))
+
+    checked_normal_status = checked_all.status.filter { name, bam, bai, isDeduped -> name == 'shared_normal' }
+    checked_tumor_status  = checked_all.status.filter { name, bam, bai, isDeduped -> name != 'shared_normal' }
+
+    already_deduped_normal =
+        checked_normal_status
+            .filter { name, bam, bai, isDeduped -> isDeduped == 'true' }
+            .map    { name, bam, bai, isDeduped -> tuple(bam, bai) }
 
     already_deduped_tumor =
-        checked_tumor.status
+        checked_tumor_status
             .filter { name, bam, bai, isDeduped -> isDeduped == 'true' }
             .map    { name, bam, bai, isDeduped -> tuple(name, bam, bai) }
 
-    needs_dedup_tumor =
-        checked_tumor.status
-            .filter { name, bam, bai, isDeduped -> isDeduped == 'false' }
-            .map    { name, bam, bai, isDeduped -> tuple(name, bam, bai) }
+    // -----------------------------------------------------------------------
+    // Dedup -- likewise ONE call, combining whatever from either side needs it.
+    // -----------------------------------------------------------------------
 
-    MARK_DUPLICATES_SPARK(needs_dedup_tumor)
+    needs_dedup_combined =
+        checked_normal_status.filter { name, bam, bai, isDeduped -> isDeduped == 'false' }
+            .mix(checked_tumor_status.filter { name, bam, bai, isDeduped -> isDeduped == 'false' })
+            .map { name, bam, bai, isDeduped -> tuple(name, bam, bai) }
 
-    runs_ch = already_deduped_tumor.mix(MARK_DUPLICATES_SPARK.out.dedup_bam)
-    // runs_ch =
-    //     Channel
-    //         .fromList(params.mutect1_runs)
-    //         .map { run ->
+    MARK_DUPLICATES_SPARK(needs_dedup_combined)
 
-    //             tuple(
-    //                 run.output_prefix,
-    //                 file(
-    //                     run.tumor_reads,
-    //                     checkIfExists: true
-    //                 ),
-    //                 file(
-    //                     run.tumor_reads_index,
-    //                     checkIfExists: true
-    //                 )
-    //             )
-    //         }
+    deduped_normal =
+        MARK_DUPLICATES_SPARK.out.dedup_bam
+            .filter { name, bam, bai -> name == 'shared_normal' }
+            .map    { name, bam, bai -> tuple(bam, bai) }
 
+    deduped_tumor =
+        MARK_DUPLICATES_SPARK.out.dedup_bam
+            .filter { name, bam, bai -> name != 'shared_normal' }
 
+    final_normal = already_deduped_normal.mix(deduped_normal).first()  // broadcasts across every MUTECT1/CONTEST call
+
+    normal_bam = final_normal.map { bam, bai -> bam }
+    normal_bai = final_normal.map { bam, bai -> bai }
+
+    runs_ch = already_deduped_tumor.mix(deduped_tumor)
     // -----------------------------------------------------------------------
     // ContEst
     // -----------------------------------------------------------------------
