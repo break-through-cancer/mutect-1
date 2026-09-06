@@ -11,7 +11,7 @@
  * NeoDisc's own pre-processed BAMs), which silently inflates apparent allele
  * support and produces excess low-confidence calls. CHECK_DEDUP_STATUS
  * inspects each BAM (@PG chain + samtools flagstat duplicate count) and only
- * BAMs found NOT already deduped are routed through MARK_DUPLICATES_SPARK.
+ * BAMs found NOT already deduped are routed through MARK_DUPLICATES.
  */
 nextflow.enable.dsl = 2
 
@@ -119,10 +119,10 @@ process CHECK_DEDUP_STATUS {
     '''
 }
 
-process MARK_DUPLICATES_SPARK {
+process MARK_DUPLICATES {
     tag "${name}"
     label 'process_high'
-    container "broadinstitute/gatk:4.5.0.0"   // needs its own container -- GATK3-era mutect1 image has no GATK4/Spark
+    container "broadinstitute/gatk:4.5.0.0"
     publishDir "${params.outdir}/${name}/dedup", mode: 'copy', pattern: '*.dup.metrics.txt'
     errorStrategy 'retry'
     maxRetries 2
@@ -142,17 +142,22 @@ process MARK_DUPLICATES_SPARK {
         ln -s !{bai} !{bam}.bai
     fi
 
-    gatk MarkDuplicatesSpark \
+    java_mem_mb=!{task.memory.toMega() - 1024}
+
+    gatk --java-options "-Xmx${java_mem_mb}m" MarkDuplicates \
         -I !{bam} \
         -O !{name}.dedup.sorted.bam \
         -M !{name}.dup.metrics.txt \
-        --conf 'spark.executor.cores=!{task.cpus}'
+        --CREATE_INDEX true
+
+    if [ -f !{name}.dedup.sorted.bai ]; then
+        mv !{name}.dedup.sorted.bai !{name}.dedup.sorted.bam.bai
+    fi
 
     test -s !{name}.dedup.sorted.bam
     test -s !{name}.dedup.sorted.bam.bai
     '''
 }
-
 
 // Index the ContEst population-frequency VCF once per workflow run.
 process INDEX_CONTEST_VCF {
@@ -698,15 +703,15 @@ workflow {
             .mix(checked_tumor_status.filter { name, bam, bai, isDeduped -> isDeduped == 'false' })
             .map { name, bam, bai, isDeduped -> tuple(name, bam, bai) }
 
-    MARK_DUPLICATES_SPARK(needs_dedup_combined)
+    MARK_DUPLICATES(needs_dedup_combined)
 
     deduped_normal =
-        MARK_DUPLICATES_SPARK.out.dedup_bam
+        MARK_DUPLICATES.out.dedup_bam
             .filter { name, bam, bai -> name == 'shared_normal' }
             .map    { name, bam, bai -> tuple(bam, bai) }
 
     deduped_tumor =
-        MARK_DUPLICATES_SPARK.out.dedup_bam
+        MARK_DUPLICATES.out.dedup_bam
             .filter { name, bam, bai -> name != 'shared_normal' }
 
     final_normal = already_deduped_normal.mix(deduped_normal).first()  // broadcasts across every MUTECT1/CONTEST call
