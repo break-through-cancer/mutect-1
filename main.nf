@@ -145,6 +145,77 @@ def NO_NORMAL_PANEL_IDX = makeNoFile('NORMAL_PANEL_IDX')
 // PROCESSES
 // ---------------------------------------------------------------------------
 
+process CHECK_DEDUP_STATUS {
+    tag "${name}"
+    label 'process_low'
+    container "ghcr.io/jchen1095/mutect_1_getzlab:v36"  // just needs samtools
+    errorStrategy 'retry'
+    maxRetries 2
+
+    input:
+    tuple val(name), path(bam), path(bai)
+
+    output:
+    tuple val(name), path(bam), path(bai), env(is_deduped), emit: status
+
+    shell:
+    '''
+    set -euxo pipefail
+
+    if [ ! -f !{bam}.bai ]; then
+        ln -s !{bai} !{bam}.bai
+    fi
+
+    pg_hit=$(samtools view -H !{bam} \
+        | grep -icE 'MarkDuplicates|biobambam|bammarkduplicates|sambamba.*markdup' \
+        || true)
+
+    dup_count=$(samtools flagstat !{bam} \
+        | awk '/ duplicates/ {print $1; exit}')
+
+    if [ "${pg_hit:-0}" -gt 0 ] || [ "${dup_count:-0}" -gt 0 ]; then
+        is_deduped="true"
+    else
+        is_deduped="false"
+    fi
+    '''
+}
+
+process MARK_DUPLICATES_SPARK {
+    tag "${name}"
+    label 'process_high'
+    container "broadinstitute/gatk:4.5.0.0"   // needs its own container -- GATK3-era mutect1 image has no GATK4/Spark
+    publishDir "${params.outdir}/${name}/dedup", mode: 'copy', pattern: '*.dup.metrics.txt'
+    errorStrategy 'retry'
+    maxRetries 2
+
+    input:
+    tuple val(name), path(bam), path(bai)
+
+    output:
+    tuple val(name), path("${name}.dedup.sorted.bam"), path("${name}.dedup.sorted.bam.bai"), emit: dedup_bam
+    path "${name}.dup.metrics.txt", emit: metrics
+
+    shell:
+    '''
+    set -euxo pipefail
+
+    if [ ! -f !{bam}.bai ]; then
+        ln -s !{bai} !{bam}.bai
+    fi
+
+    gatk MarkDuplicatesSpark \
+        -I !{bam} \
+        -O !{name}.dedup.sorted.bam \
+        -M !{name}.dup.metrics.txt \
+        --conf 'spark.executor.cores=!{task.cpus}'
+
+    test -s !{name}.dedup.sorted.bam
+    test -s !{name}.dedup.sorted.bam.bai
+    '''
+}
+
+
 // Index the ContEst population-frequency VCF once per workflow run.
 process INDEX_CONTEST_VCF {
     tag "ContEst germline resource"
@@ -717,47 +788,51 @@ workflow {
 
 
     // -----------------------------------------------------------------------
-    // Shared matched normal
+    // Shared matched normal -- resolve the raw path first
     // -----------------------------------------------------------------------
 
     params.mutect1_runs.each { run ->
-
         if (!run.normal_reads || !run.normal_reads_index) {
             error "Run ${run.output_prefix} is missing normal_reads/normal_reads_index -- this pipeline requires a matched normal."
         }
     }
 
-    shared_normal_paths =
-        params.mutect1_runs
-            .collect { it.normal_reads }
-            .unique()
-
-    shared_normal_index_paths =
-        params.mutect1_runs
-            .collect { it.normal_reads_index }
-            .unique()
+    shared_normal_paths       = params.mutect1_runs.collect { it.normal_reads }.unique()
+    shared_normal_index_paths = params.mutect1_runs.collect { it.normal_reads_index }.unique()
 
     if (shared_normal_paths.size() != 1) {
         error "Expected exactly one shared normal BAM across params.mutect1_runs, found: ${shared_normal_paths}"
     }
-
     if (shared_normal_index_paths.size() != 1) {
         error "Expected exactly one shared normal BAM index across params.mutect1_runs, found: ${shared_normal_index_paths}"
     }
 
+    raw_normal_bam = file(shared_normal_paths[0], checkIfExists: true)
+    raw_normal_bai = file(shared_normal_index_paths[0], checkIfExists: true)
 
-    normal_bam =
-        file(
-            shared_normal_paths[0],
-            checkIfExists: true
-        )
+    normal_ch = Channel.of(tuple('shared_normal', raw_normal_bam, raw_normal_bai))
 
-    normal_bai =
-        file(
-            shared_normal_index_paths[0],
-            checkIfExists: true
-        )
+    checked_normal = CHECK_DEDUP_STATUS(normal_ch)
 
+    already_deduped_normal =
+        checked_normal.status
+            .filter { name, bam, bai, isDeduped -> isDeduped == 'true' }
+            .map    { name, bam, bai, isDeduped -> tuple(bam, bai) }
+
+    needs_dedup_normal =
+        checked_normal.status
+            .filter { name, bam, bai, isDeduped -> isDeduped == 'false' }
+            .map    { name, bam, bai, isDeduped -> tuple(name, bam, bai) }
+
+    MARK_DUPLICATES_SPARK(needs_dedup_normal)
+
+    final_normal =
+        already_deduped_normal
+            .mix(MARK_DUPLICATES_SPARK.out.dedup_bam.map { name, bam, bai -> tuple(bam, bai) })
+            .first()   // broadcasts this singleton across every MUTECT1/CONTEST call
+
+    normal_bam = final_normal.map { bam, bai -> bam }.first()
+    normal_bai = final_normal.map { bam, bai -> bai }.first()
 
     // -----------------------------------------------------------------------
     // Reference
@@ -855,23 +930,49 @@ workflow {
     // Tumor runs
     // -----------------------------------------------------------------------
 
-    runs_ch =
+    raw_runs_ch =
         Channel
             .fromList(params.mutect1_runs)
             .map { run ->
-
                 tuple(
                     run.output_prefix,
-                    file(
-                        run.tumor_reads,
-                        checkIfExists: true
-                    ),
-                    file(
-                        run.tumor_reads_index,
-                        checkIfExists: true
-                    )
+                    file(run.tumor_reads, checkIfExists: true),
+                    file(run.tumor_reads_index, checkIfExists: true)
                 )
             }
+
+    checked_tumor = CHECK_DEDUP_STATUS(raw_runs_ch)
+
+    already_deduped_tumor =
+        checked_tumor.status
+            .filter { name, bam, bai, isDeduped -> isDeduped == 'true' }
+            .map    { name, bam, bai, isDeduped -> tuple(name, bam, bai) }
+
+    needs_dedup_tumor =
+        checked_tumor.status
+            .filter { name, bam, bai, isDeduped -> isDeduped == 'false' }
+            .map    { name, bam, bai, isDeduped -> tuple(name, bam, bai) }
+
+    MARK_DUPLICATES_SPARK(needs_dedup_tumor)
+
+    runs_ch = already_deduped_tumor.mix(MARK_DUPLICATES_SPARK.out.dedup_bam)
+    // runs_ch =
+    //     Channel
+    //         .fromList(params.mutect1_runs)
+    //         .map { run ->
+
+    //             tuple(
+    //                 run.output_prefix,
+    //                 file(
+    //                     run.tumor_reads,
+    //                     checkIfExists: true
+    //                 ),
+    //                 file(
+    //                     run.tumor_reads_index,
+    //                     checkIfExists: true
+    //                 )
+    //             )
+    //         }
 
 
     // -----------------------------------------------------------------------
