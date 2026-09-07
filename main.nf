@@ -148,7 +148,11 @@ process MARK_DUPLICATES {
         -I !{bam} \
         -O !{name}.dedup.sorted.bam \
         -M !{name}.dup.metrics.txt \
-        --CREATE_INDEX true
+        --CREATE_INDEX true \
+        --ASSUME_SORT_ORDER coordinate \
+        --MAX_RECORDS_IN_RAM 250000 \
+        --SORTING_COLLECTION_SIZE_RATIO 0.15 \
+        --TMP_DIR .
 
     if [ -f !{name}.dedup.sorted.bai ]; then
         mv !{name}.dedup.sorted.bai !{name}.dedup.sorted.bam.bai
@@ -157,7 +161,7 @@ process MARK_DUPLICATES {
     test -s !{name}.dedup.sorted.bam
     test -s !{name}.dedup.sorted.bam.bai
     '''
-}
+    }
 
 // Index the ContEst population-frequency VCF once per workflow run.
 process INDEX_CONTEST_VCF {
