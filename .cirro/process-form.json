@@ -146,6 +146,12 @@
         "description": "Exclude chimeric read pairs during MuTect1 calling.",
         "type": "boolean",
         "default": true
+      },
+      "make_force_calling_intervals": {
+      "title": "Generate force-calling interval list",
+      "description": "After all samples finish, merge their PASS-filtered VCFs and derive a force-calling interval list from the merged sites. Adds a bgzip/index/merge step across the whole cohort.",
+      "type": "boolean",
+      "default": false
       }
     },
     "required": [
