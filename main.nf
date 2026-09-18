@@ -626,7 +626,7 @@ process BGZIP_AND_INDEX_VCF {
     '''
     set -euxo pipefail
 
-    bgzip -c !{vcf} > !{pairName}.filtered.vcf.gz
+    bcftools sort -Oz -o !{pairName}.filtered.vcf.gz !{vcf}
     tabix -f -p vcf !{pairName}.filtered.vcf.gz
 
     test -s !{pairName}.filtered.vcf.gz
