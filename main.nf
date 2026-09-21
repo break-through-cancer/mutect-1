@@ -720,6 +720,8 @@ process VCF_TO_INTERVAL_LIST {
     input:
     path merged_vcf
     path merged_vcf_tbi
+    path ref_fasta
+    path ref_fai
     path ref_dict
 
     output:
@@ -732,7 +734,7 @@ process VCF_TO_INTERVAL_LIST {
     gatk VcfToIntervalList \
         -I !{merged_vcf} \
         -O force_calling.interval_list \
-        --SEQUENCE_DICTIONARY !{ref_dict}
+        -R !{ref_fasta}
 
     test -s force_calling.interval_list
     '''
@@ -1049,6 +1051,8 @@ workflow {
         VCF_TO_INTERVAL_LIST(
             merge_all_sample_vcfs.out.vcf,
             merge_all_sample_vcfs.out.tbi,
+            ref_fasta,
+            ref_fai,
             ref_dict
         )
     }
