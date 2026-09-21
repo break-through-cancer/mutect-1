@@ -63,22 +63,6 @@
         "pathType": "reference",
         "file": "**/*"
       },
-      "snp6_bed": {
-        "title": "SNP6 BED",
-        "description": "Optional SNP6 loci BED used by ContEst.",
-        "type": "string",
-        "multiple": false,
-        "pathType": "reference",
-        "file": "**/*"
-      },
-      "hapmap_vcf": {
-        "title": "HapMap VCF",
-        "description": "Optional HapMap VCF used by ContEst.",
-        "type": "string",
-        "multiple": false,
-        "pathType": "reference",
-        "file": "**/*"
-      },
       "fracContam": {
         "title": "Fallback contamination fraction",
         "description": "Contamination fraction passed to MuTect1 when the full ContEst input set is not supplied.",
