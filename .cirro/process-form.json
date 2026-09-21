@@ -94,7 +94,7 @@
         "description": "Optional file listing read groups that MuTect1 should ignore.",
         "type": "string",
         "multiple": false,
-        "pathType": "dataset",
+        "pathType": "reference",
         "file": "**/*"
       },
       "normal_panel": {
