@@ -37,7 +37,7 @@ if (!params.containsKey('ref_fai'))                    params.ref_fai = null
 if (!params.containsKey('ref_dict'))                   params.ref_dict = null
 
 if (!params.containsKey('scatter_count'))              params.scatter_count = 200
-if (!params.containsKey('padding_bp'))                 params.padding_bp = 500
+if (!params.containsKey('padding_bp'))                 params.padding_bp = 100
 if (!params.containsKey('target_list'))                params.target_list = null
 
 // ContEst-only inputs
