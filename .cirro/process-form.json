@@ -47,6 +47,13 @@
         "default": 200,
         "minimum": 1
       },
+      "padding_bp": {
+        "title": "Interval padding (bp)",
+        "description": "Number of base pairs to pad each interval shard on both sides. Padding prevents edge artifacts when scatter-gathering. NeoDisc default: 100bp.",
+        "type": "integer",
+        "default": 100,
+        "minimum": 0
+      },
       "target_list": {
         "title": "Target intervals",
         "description": "Optional BED or interval file restricting MuTect1 calling. Leave blank for genome-wide calling.",

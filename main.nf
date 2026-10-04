@@ -37,6 +37,7 @@ if (!params.containsKey('ref_fai'))                    params.ref_fai = null
 if (!params.containsKey('ref_dict'))                   params.ref_dict = null
 
 if (!params.containsKey('scatter_count'))              params.scatter_count = 200
+if (!params.containsKey('padding_bp'))                 params.padding_bp = 100
 if (!params.containsKey('target_list'))                params.target_list = null
 
 // ContEst-only inputs
@@ -86,85 +87,87 @@ def NO_NORMAL_PANEL_IDX = makeNoFile('NORMAL_PANEL_IDX')
 // PROCESSES
 // ---------------------------------------------------------------------------
 
-process CHECK_DEDUP_STATUS {
-    tag "${name}"
-    label 'process_low'
-    container "ghcr.io/jchen1095/mutect_1_getzlab:v36"  // just needs samtools
-    errorStrategy 'retry'
-    maxRetries 2
+// CHECK_DEDUP_STATUS commented out -- inputs are assumed to be pre-deduplicated
+// process CHECK_DEDUP_STATUS {
+//     tag "${name}"
+//     label 'process_low'
+//     container "ghcr.io/jchen1095/mutect_1_getzlab:v36"  // just needs samtools
+//     errorStrategy 'retry'
+//     maxRetries 2
+//
+//     input:
+//     tuple val(name), path(bam), path(bai)
+//
+//     output:
+//     tuple val(name), path(bam), path(bai), env(is_deduped), emit: status
+//
+//     shell:
+//     '''
+//     set -euxo pipefail
+//
+//     if [ ! -f !{bam}.bai ]; then
+//         ln -s !{bai} !{bam}.bai
+//     fi
+//
+//     pg_hit=$(samtools view -H !{bam} \
+//         | grep -icE 'MarkDuplicates|biobambam|bammarkduplicates|sambamba.*markdup' \
+//         || true)
+//
+//     dup_count=$(samtools flagstat !{bam} \
+//         | awk '/ duplicates/ {print $1; exit}')
+//
+//     if [ "${pg_hit:-0}" -gt 0 ] || [ "${dup_count:-0}" -gt 0 ]; then
+//         is_deduped="true"
+//     else
+//         is_deduped="false"
+//     fi
+//     '''
+// }
 
-    input:
-    tuple val(name), path(bam), path(bai)
-
-    output:
-    tuple val(name), path(bam), path(bai), env(is_deduped), emit: status
-
-    shell:
-    '''
-    set -euxo pipefail
-
-    if [ ! -f !{bam}.bai ]; then
-        ln -s !{bai} !{bam}.bai
-    fi
-
-    pg_hit=$(samtools view -H !{bam} \
-        | grep -icE 'MarkDuplicates|biobambam|bammarkduplicates|sambamba.*markdup' \
-        || true)
-
-    dup_count=$(samtools flagstat !{bam} \
-        | awk '/ duplicates/ {print $1; exit}')
-
-    if [ "${pg_hit:-0}" -gt 0 ] || [ "${dup_count:-0}" -gt 0 ]; then
-        is_deduped="true"
-    else
-        is_deduped="false"
-    fi
-    '''
-}
-
-process MARK_DUPLICATES {
-    tag "${name}"
-    label 'process_high'
-    container "broadinstitute/gatk:4.5.0.0"
-    publishDir "${params.outdir}/${name}/dedup", mode: 'copy', pattern: '*.dup.metrics.txt'
-    errorStrategy 'retry'
-    maxRetries 2
-
-    input:
-    tuple val(name), path(bam), path(bai)
-
-    output:
-    tuple val(name), path("${name}.dedup.sorted.bam"), path("${name}.dedup.sorted.bam.bai"), emit: dedup_bam
-    path "${name}.dup.metrics.txt", emit: metrics
-
-    shell:
-    '''
-    set -euxo pipefail
-
-    if [ ! -f !{bam}.bai ]; then
-        ln -s !{bai} !{bam}.bai
-    fi
-
-    java_mem_mb=!{task.memory.toMega() - 1024}
-
-    gatk --java-options "-Xmx${java_mem_mb}m" MarkDuplicates \
-        -I !{bam} \
-        -O !{name}.dedup.sorted.bam \
-        -M !{name}.dup.metrics.txt \
-        --CREATE_INDEX true \
-        --ASSUME_SORT_ORDER coordinate \
-        --MAX_RECORDS_IN_RAM 250000 \
-        --SORTING_COLLECTION_SIZE_RATIO 0.15 \
-        --TMP_DIR .
-
-    if [ -f !{name}.dedup.sorted.bai ]; then
-        mv !{name}.dedup.sorted.bai !{name}.dedup.sorted.bam.bai
-    fi
-
-    test -s !{name}.dedup.sorted.bam
-    test -s !{name}.dedup.sorted.bam.bai
-    '''
-    }
+// MARK_DUPLICATES commented out -- inputs are assumed to be pre-deduplicated
+// process MARK_DUPLICATES {
+//     tag "${name}"
+//     label 'process_high'
+//     container "broadinstitute/gatk:4.5.0.0"
+//     publishDir "${params.outdir}/${name}/dedup", mode: 'copy', pattern: '*.dup.metrics.txt'
+//     errorStrategy 'retry'
+//     maxRetries 2
+//
+//     input:
+//     tuple val(name), path(bam), path(bai)
+//
+//     output:
+//     tuple val(name), path("${name}.dedup.sorted.bam"), path("${name}.dedup.sorted.bam.bai"), emit: dedup_bam
+//     path "${name}.dup.metrics.txt", emit: metrics
+//
+//     shell:
+//     '''
+//     set -euxo pipefail
+//
+//     if [ ! -f !{bam}.bai ]; then
+//         ln -s !{bai} !{bam}.bai
+//     fi
+//
+//     java_mem_mb=!{task.memory.toMega() - 1024}
+//
+//     gatk --java-options "-Xmx${java_mem_mb}m" MarkDuplicates \
+//         -I !{bam} \
+//         -O !{name}.dedup.sorted.bam \
+//         -M !{name}.dup.metrics.txt \
+//         --CREATE_INDEX true \
+//         --ASSUME_SORT_ORDER coordinate \
+//         --MAX_RECORDS_IN_RAM 250000 \
+//         --SORTING_COLLECTION_SIZE_RATIO 0.15 \
+//         --TMP_DIR .
+//
+//     if [ -f !{name}.dedup.sorted.bai ]; then
+//         mv !{name}.dedup.sorted.bai !{name}.dedup.sorted.bam.bai
+//     fi
+//
+//     test -s !{name}.dedup.sorted.bam
+//     test -s !{name}.dedup.sorted.bam.bai
+//     '''
+//     }
 
 // Index the ContEst population-frequency VCF once per workflow run.
 process INDEX_CONTEST_VCF {
@@ -289,6 +292,7 @@ process SPLIT_INTERVALS {
     tuple val(pairName), path(t_bam), path(t_bai)
     val ref
     path target_list
+    path ref_dict
 
     output:
     tuple val(pairName), path('picard/*.interval_list'), emit: interval_files
@@ -314,6 +318,21 @@ process SPLIT_INTERVALS {
         -N !{params.scatter_count} \
         $target_arg \
         -chrs $selected_chrs
+
+    # Apply padding to each interval
+    mkdir -p picard_padded
+    for interval in picard/*.interval_list; do
+        filename=$(basename "$interval")
+        gatk PadIntervalList \
+            -I "$interval" \
+            -O "picard_padded/$filename" \
+            -PL !{params.padding_bp} \
+            -SD !{ref_dict}
+    done
+
+    # Replace original intervals with padded versions
+    mv picard_padded/* picard/
+    rmdir picard_padded
 
     for interval in picard/*.interval_list; do
         test -s "$interval"
@@ -810,52 +829,14 @@ workflow {
             }
 
     // -----------------------------------------------------------------------
-    // Dedup check -- ONE call covering the normal + every tumor BAM.
-    // 'shared_normal' as a name value is how we tell the normal apart from
-    // tumor samples after this merges back into a single output stream.
+    // Dedup check and MARK_DUPLICATES commented out
+    // Inputs are assumed to be pre-deduplicated
     // -----------------------------------------------------------------------
 
-    checked_all = CHECK_DEDUP_STATUS(normal_ch.mix(raw_runs_ch))
+    normal_bam = normal_ch.map { name, bam, bai -> bam }.first()
+    normal_bai = normal_ch.map { name, bam, bai -> bai }.first()
 
-    checked_normal_status = checked_all.status.filter { name, bam, bai, isDeduped -> name == 'shared_normal' }
-    checked_tumor_status  = checked_all.status.filter { name, bam, bai, isDeduped -> name != 'shared_normal' }
-
-    already_deduped_normal =
-        checked_normal_status
-            .filter { name, bam, bai, isDeduped -> isDeduped == 'true' }
-            .map    { name, bam, bai, isDeduped -> tuple(bam, bai) }
-
-    already_deduped_tumor =
-        checked_tumor_status
-            .filter { name, bam, bai, isDeduped -> isDeduped == 'true' }
-            .map    { name, bam, bai, isDeduped -> tuple(name, bam, bai) }
-
-    // -----------------------------------------------------------------------
-    // Dedup -- likewise ONE call, combining whatever from either side needs it.
-    // -----------------------------------------------------------------------
-
-    needs_dedup_combined =
-        checked_normal_status.filter { name, bam, bai, isDeduped -> isDeduped == 'false' }
-            .mix(checked_tumor_status.filter { name, bam, bai, isDeduped -> isDeduped == 'false' })
-            .map { name, bam, bai, isDeduped -> tuple(name, bam, bai) }
-
-    MARK_DUPLICATES(needs_dedup_combined)
-
-    deduped_normal =
-        MARK_DUPLICATES.out.dedup_bam
-            .filter { name, bam, bai -> name == 'shared_normal' }
-            .map    { name, bam, bai -> tuple(bam, bai) }
-
-    deduped_tumor =
-        MARK_DUPLICATES.out.dedup_bam
-            .filter { name, bam, bai -> name != 'shared_normal' }
-
-    final_normal = already_deduped_normal.mix(deduped_normal).first()  // broadcasts across every MUTECT1/CONTEST call
-
-    normal_bam = final_normal.map { bam, bai -> bam }
-    normal_bai = final_normal.map { bam, bai -> bai }
-
-    runs_ch = already_deduped_tumor.mix(deduped_tumor)
+    runs_ch = raw_runs_ch
 
     // -----------------------------------------------------------------------
     // ContEst
@@ -936,7 +917,8 @@ workflow {
     SPLIT_INTERVALS(
         runs_ch,
         params.ref,
-        target_list
+        target_list,
+        ref_dict
     )
 
     shards_per_pair =
