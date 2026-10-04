@@ -292,7 +292,6 @@ process SPLIT_INTERVALS {
     tuple val(pairName), path(t_bam), path(t_bai)
     val ref
     path target_list
-    path ref_dict
 
     output:
     tuple val(pairName), path('picard/*.interval_list'), emit: interval_files
@@ -319,24 +318,36 @@ process SPLIT_INTERVALS {
         $target_arg \
         -chrs $selected_chrs
 
-    # Apply padding to each interval
-    mkdir -p picard_padded
-    for interval in picard/*.interval_list; do
-        filename=$(basename "$interval")
-        gatk PadIntervalList \
-            -I "$interval" \
-            -O "picard_padded/$filename" \
-            -PL !{params.padding_bp} \
-            -SD !{ref_dict}
-    done
-
-    # Replace original intervals with padded versions
-    mv picard_padded/* picard/
-    rmdir picard_padded
-
     for interval in picard/*.interval_list; do
         test -s "$interval"
     done
+    '''
+}
+
+process PAD_INTERVALS {
+    tag "${pairName}:${interval_file.baseName}"
+    label 'process_low'
+    container "broadinstitute/gatk:4.5.0.0"
+    errorStrategy 'retry'
+    maxRetries 2
+
+    input:
+    tuple val(pairName), path(interval_file)
+    path ref_dict
+    val padding
+
+    output:
+    tuple val(pairName), path("${interval_file.baseName}.padded.interval_list"), emit: padded
+
+    shell:
+    '''
+    gatk PadIntervalList \
+        -I !{interval_file} \
+        -O !{interval_file.baseName}.padded.interval_list \
+        -PL !{padding} \
+        -SD !{ref_dict}
+
+    test -s !{interval_file.baseName}.padded.interval_list
     '''
 }
 
@@ -917,15 +928,25 @@ workflow {
     SPLIT_INTERVALS(
         runs_ch,
         params.ref,
-        target_list,
-        ref_dict
+        target_list
     )
 
-    shards_per_pair =
+    split_shards =
         SPLIT_INTERVALS
             .out
             .interval_files
             .transpose()
+
+    PAD_INTERVALS(
+        split_shards,
+        ref_dict,
+        params.padding_bp
+    )
+
+    shards_per_pair =
+        PAD_INTERVALS
+            .out
+            .padded
 
     // -----------------------------------------------------------------------
     // Join intervals with tumor + contamination data
