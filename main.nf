@@ -591,8 +591,20 @@ PYCODE
         ) \
         > !{pairName}.MuTect1.PASS.vcf
 
-    awk '!(/REJECT/)' \
-        !{pairName}.MuTect1.vcf \
+    cat \
+        <(sed -n '/^#/p' !{pairName}.MuTect1.vcf) \
+        <(
+            awk -F '\t' \
+                '!/^#/ && !/REJECT/ && $1 ~ /[0-9]+/' \
+                !{pairName}.MuTect1.vcf \
+                | sort -k1,1n -k2,2n
+        ) \
+        <(
+            awk -F '\t' \
+                '!/^#/ && !/REJECT/ && $1 !~ /[0-9]+/' \
+                !{pairName}.MuTect1.vcf \
+                | sort -k1,1 -k2,2n
+        ) \
         > !{pairName}.mutectv1.final.vcf
 
     awk -F '\t' \
