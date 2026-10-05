@@ -310,7 +310,7 @@ process SPLIT_INTERVALS {
         target_arg="-target_list !{target_list}"
     fi
 
-    split_intervals.py \
+    python3 /app/split_intervals.py \
         -bam !{t_bam} \
         -bai !{t_bai} \
         -interval_type picard \
