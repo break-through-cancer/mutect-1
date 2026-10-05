@@ -283,7 +283,7 @@ process CONTEST {
 process SPLIT_INTERVALS {
     tag "${pairName}"
     label 'process_low'
-    container "ghcr.io/jchen1095/split_intervals:v48"
+    container "ghcr.io/jchen1095/split_intervals:v48-padded"
     publishDir "${params.outdir}/${pairName}/intervals", mode: 'copy'
     errorStrategy 'retry'
     maxRetries 4
@@ -292,7 +292,6 @@ process SPLIT_INTERVALS {
     tuple val(pairName), path(t_bam), path(t_bai)
     val ref
     path target_list
-    path split_intervals_script
 
     output:
     tuple val(pairName), path('picard/*.interval_list'), emit: interval_files
@@ -311,7 +310,7 @@ process SPLIT_INTERVALS {
         target_arg="-target_list !{target_list}"
     fi
 
-    python3 !{split_intervals_script} \
+    split_intervals.py \
         -bam !{t_bam} \
         -bai !{t_bai} \
         -interval_type picard \
@@ -900,13 +899,10 @@ workflow {
     // Scatter
     // -----------------------------------------------------------------------
 
-    split_intervals_script = file("${workflow.projectDir}/assets/split_intervals.py", checkIfExists: true)
-
     SPLIT_INTERVALS(
         runs_ch,
         params.ref,
-        target_list,
-        split_intervals_script
+        target_list
     )
 
     shards_per_pair =
