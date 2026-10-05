@@ -283,7 +283,7 @@ process CONTEST {
 process SPLIT_INTERVALS {
     tag "${pairName}"
     label 'process_low'
-    container "ghcr.io/jchen1095/split_intervals:v48"
+    container "ghcr.io/jchen1095/split_intervals:v48-padded"
     publishDir "${params.outdir}/${pairName}/intervals", mode: 'copy'
     errorStrategy 'retry'
     maxRetries 4
