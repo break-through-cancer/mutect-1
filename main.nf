@@ -283,7 +283,7 @@ process CONTEST {
 process SPLIT_INTERVALS {
     tag "${pairName}"
     label 'process_low'
-    container "ghcr.io/jchen1095/split_intervals:v48"
+    container "ghcr.io/jchen1095/split_intervals:v48-padded"
     publishDir "${params.outdir}/${pairName}/intervals", mode: 'copy'
     errorStrategy 'retry'
     maxRetries 4
@@ -315,39 +315,13 @@ process SPLIT_INTERVALS {
         -bai !{t_bai} \
         -interval_type picard \
         -N !{params.scatter_count} \
+        -padding !{params.padding_bp} \
         $target_arg \
         -chrs $selected_chrs
 
     for interval in picard/*.interval_list; do
         test -s "$interval"
     done
-    '''
-}
-
-process PAD_INTERVALS {
-    tag "${pairName}:${interval_file.baseName}"
-    label 'process_low'
-    container "broadinstitute/gatk:4.5.0.0"
-    errorStrategy 'retry'
-    maxRetries 2
-
-    input:
-    tuple val(pairName), path(interval_file)
-    path ref_dict
-    val padding
-
-    output:
-    tuple val(pairName), path("${interval_file.baseName}.padded.interval_list"), emit: padded
-
-    shell:
-    '''
-    gatk PadIntervalList \
-        -I !{interval_file} \
-        -O !{interval_file.baseName}.padded.interval_list \
-        -PL !{padding} \
-        -SD !{ref_dict}
-
-    test -s !{interval_file.baseName}.padded.interval_list
     '''
 }
 
@@ -931,22 +905,11 @@ workflow {
         target_list
     )
 
-    split_shards =
+    shards_per_pair =
         SPLIT_INTERVALS
             .out
             .interval_files
             .transpose()
-
-    PAD_INTERVALS(
-        split_shards,
-        ref_dict,
-        params.padding_bp
-    )
-
-    shards_per_pair =
-        PAD_INTERVALS
-            .out
-            .padded
 
     // -----------------------------------------------------------------------
     // Join intervals with tumor + contamination data
