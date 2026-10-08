@@ -150,7 +150,7 @@
         "type": "string",
         "multiple": false,
         "pathType": "dataset",
-        "file": "*.interval_list"
+        "file": "**/*"
       }
     },
     "required": [
