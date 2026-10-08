@@ -56,7 +56,7 @@
       },
       "target_list": {
         "title": "Target intervals",
-        "description": "Optional BED or interval file restricting MuTect1 calling. Leave blank for genome-wide calling.",
+        "description": "Optional reference BED or interval file restricting MuTect1 calling to specific regions (e.g., capture panel). Leave blank for genome-wide. Ignored if force_calling_intervals is provided.",
         "type": "string",
         "multiple": false,
         "pathType": "reference",
@@ -146,7 +146,7 @@
       },
       "force_calling_intervals": {
         "title": "Force-calling interval list",
-        "description": "Pre-computed interval list from a previous MuTect1 run. Required when force calling is enabled. Use the force_calling.interval_list output from a prior pipeline run.",
+        "description": "Optional pre-computed interval list from a previous MuTect1 run (force_calling.interval_list). When provided, overrides target_list. Requires params.force_calling=true.",
         "type": "string",
         "multiple": false,
         "pathType": "dataset",
