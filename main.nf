@@ -39,6 +39,7 @@ if (!params.containsKey('ref_dict'))                   params.ref_dict = null
 if (!params.containsKey('scatter_count'))              params.scatter_count = 200
 if (!params.containsKey('padding_bp'))                 params.padding_bp = 100
 if (!params.containsKey('target_list'))                params.target_list = null
+if (!params.containsKey('force_calling_intervals'))    params.force_calling_intervals = null
 
 // ContEst-only inputs
 if (!params.containsKey('contest_target_intervals'))   params.contest_target_intervals = null
@@ -776,7 +777,9 @@ workflow {
     ref_fai   = file(params.ref_fai,   checkIfExists: true)
     ref_dict  = file(params.ref_dict,  checkIfExists: true)
 
-    target_list = params.target_list ? file(params.target_list, checkIfExists: true) : NO_TARGET_LIST
+    // Use force_calling_intervals if provided, otherwise use target_list (or neither for genome-wide)
+    target_list = params.force_calling_intervals ? file(params.force_calling_intervals, checkIfExists: true) :
+                  (params.target_list ? file(params.target_list, checkIfExists: true) : NO_TARGET_LIST)
 
     dbsnp    = params.dbsnp     ? file(params.dbsnp,     checkIfExists: true) : NO_DBSNP
     dbsnpIdx = params.dbsnp_idx ? file(params.dbsnp_idx, checkIfExists: true) : NO_DBSNP_IDX
