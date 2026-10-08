@@ -139,10 +139,18 @@
         "default": true
       },
       "make_force_calling_intervals": {
-      "title": "Generate force-calling interval list",
-      "description": "After all samples finish, merge their PASS-filtered VCFs and derive a force-calling interval list from the merged sites. Adds a bgzip/index/merge step across the whole cohort.",
-      "type": "boolean",
-      "default": false
+        "title": "Generate force-calling interval list",
+        "description": "After all samples finish, merge their PASS-filtered VCFs and derive a force-calling interval list from the merged sites. Adds a bgzip/index/merge step across the whole cohort.",
+        "type": "boolean",
+        "default": false
+      },
+      "force_calling_intervals": {
+        "title": "Force-calling interval list",
+        "description": "Optional pre-computed interval list from a previous MuTect1 run (force_calling.interval_list). When provided, takes precedence over target_list.",
+        "type": "string",
+        "multiple": false,
+        "pathType": "dataset",
+        "file": "*.interval_list"
       }
     },
     "required": [
