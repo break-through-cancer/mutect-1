@@ -22,5 +22,6 @@
   "max_mismatch_baseq_sum": "$.dataset.params.max_mismatch_baseq_sum",
   "force_calling": "$.dataset.params.force_calling",
   "make_force_calling_intervals": "$.dataset.params.make_force_calling_intervals",
+  "force_calling_intervals": "$.dataset.params.force_calling_intervals",
   "exclude_chimeric": "$.dataset.params.exclude_chimeric"
 }
