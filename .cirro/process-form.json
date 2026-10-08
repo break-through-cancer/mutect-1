@@ -56,7 +56,7 @@
       },
       "target_list": {
         "title": "Target intervals",
-        "description": "Optional reference BED or interval file restricting MuTect1 calling to specific regions (e.g., capture panel). Leave blank for genome-wide. Ignored if force_calling_intervals is provided.",
+        "description": "Optional BED or interval file restricting MuTect1 calling. Leave blank for genome-wide calling.",
         "type": "string",
         "multiple": false,
         "pathType": "reference",
@@ -139,18 +139,10 @@
         "default": true
       },
       "make_force_calling_intervals": {
-        "title": "Generate force-calling interval list",
-        "description": "After all samples finish, merge their PASS-filtered VCFs and derive a force-calling interval list from the merged sites. Adds a bgzip/index/merge step across the whole cohort.",
-        "type": "boolean",
-        "default": false
-      },
-      "force_calling_intervals": {
-        "title": "Force-calling interval list",
-        "description": "Optional pre-computed interval list from a previous MuTect1 run (force_calling.interval_list). When provided, overrides target_list. Requires params.force_calling=true.",
-        "type": "string",
-        "multiple": false,
-        "pathType": "dataset",
-        "file": "*.interval_list"
+      "title": "Generate force-calling interval list",
+      "description": "After all samples finish, merge their PASS-filtered VCFs and derive a force-calling interval list from the merged sites. Adds a bgzip/index/merge step across the whole cohort.",
+      "type": "boolean",
+      "default": false
       }
     },
     "required": [
