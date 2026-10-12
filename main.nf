@@ -63,26 +63,14 @@ if (!params.containsKey('exclude_chimeric'))           params.exclude_chimeric =
 //for merging vcfs 
 if (!params.containsKey('make_force_calling_intervals'))  params.make_force_calling_intervals = false
 
-def assetsDir = new File("${workflow.projectDir}/assets")
-assetsDir.mkdirs()
-
-def makeNoFile = { String name ->
-    def f = file("${workflow.projectDir}/assets/NO_${name}")
-    if (!f.exists()) {
-        f.text = ''
-    }
-    return f
-}
-
-def NO_TARGET_LIST      = makeNoFile('TARGET_LIST')
-def NO_SNP6_BED         = makeNoFile('SNP6_BED')
-def NO_DBSNP            = makeNoFile('DBSNP')
-def NO_DBSNP_IDX        = makeNoFile('DBSNP_IDX')
-def NO_COSMIC           = makeNoFile('COSMIC')
-def NO_COSMIC_IDX       = makeNoFile('COSMIC_IDX')
-def NO_RG_BLACKLIST     = makeNoFile('RG_BLACKLIST')
-def NO_NORMAL_PANEL     = makeNoFile('NORMAL_PANEL')
-def NO_NORMAL_PANEL_IDX = makeNoFile('NORMAL_PANEL_IDX')
+// Optional file inputs: when a param is unset, the workflow block passes an
+// empty list ([]) to the corresponding `path` input. Nextflow stages nothing
+// for [], and the process script sees an empty string, so scripts test
+// `[ -n "!{x}" ]`. This replaces the old NO_* sentinel files, which had to be
+// written into projectDir at startup and uploaded to the S3 stage dir for
+// every task -- racy under awsbatch with many concurrent tasks (HeadObject 404
+// on NO_NORMAL_PANEL etc.).
+def NO_FILE = []
 
 // ---------------------------------------------------------------------------
 // PROCESSES
@@ -241,7 +229,7 @@ process CONTEST {
     java_mem_mb=!{task.memory.toMega() - 1024}
 
     snp6_args=""
-    if [ "!{snp6Bed}" != "NO_SNP6_BED" ]; then
+    if [ -n "!{snp6Bed}" ]; then
         snp6_args="-L !{snp6Bed} -isr INTERSECTION"
     fi
 
@@ -307,7 +295,7 @@ process SPLIT_INTERVALS {
 
     target_arg=""
 
-    if [ "!{target_list}" != "NO_TARGET_LIST" ]; then
+    if [ -n "!{target_list}" ]; then
         target_arg="-target_list !{target_list}"
     fi
 
@@ -429,9 +417,9 @@ process MUTECT1 {
 
     extra_args=""
 
-    if [ "!{dbsnp}" != "NO_DBSNP" ]; then
+    if [ -n "!{dbsnp}" ]; then
 
-        if [ "!{dbsnpIdx}" == "NO_DBSNP_IDX" ]; then
+        if [ -z "!{dbsnpIdx}" ]; then
             echo "ERROR: dbSNP VCF was supplied without dbsnp_idx" >&2
             exit 1
         fi
@@ -445,9 +433,9 @@ process MUTECT1 {
         extra_args="$extra_args --dbsnp !{dbsnp}"
     fi
 
-    if [ "!{cosmic}" != "NO_COSMIC" ]; then
+    if [ -n "!{cosmic}" ]; then
 
-        if [ "!{cosmicIdx}" == "NO_COSMIC_IDX" ]; then
+        if [ -z "!{cosmicIdx}" ]; then
             echo "ERROR: COSMIC VCF was supplied without cosmic_idx" >&2
             exit 1
         fi
@@ -461,11 +449,11 @@ process MUTECT1 {
         extra_args="$extra_args --cosmic !{cosmic}"
     fi
 
-    if [ "!{readGroupBlacklist}" != "NO_RG_BLACKLIST" ]; then
+    if [ -n "!{readGroupBlacklist}" ]; then
         extra_args="$extra_args --read_group_black_list !{readGroupBlacklist}"
     fi
 
-    if [ "!{normalPanel}" != "NO_NORMAL_PANEL" ]; then
+    if [ -n "!{normalPanel}" ]; then
         extra_args="$extra_args --normal_panel !{normalPanel}"
     fi
 
@@ -779,18 +767,18 @@ workflow {
 
     // Use force_calling_intervals if provided, otherwise use target_list (or neither for genome-wide)
     target_list = params.force_calling_intervals ? file(params.force_calling_intervals) :
-                  (params.target_list ? file(params.target_list, checkIfExists: true) : NO_TARGET_LIST)
+                  (params.target_list ? file(params.target_list, checkIfExists: true) : NO_FILE)
 
-    dbsnp    = params.dbsnp     ? file(params.dbsnp,     checkIfExists: true) : NO_DBSNP
-    dbsnpIdx = params.dbsnp_idx ? file(params.dbsnp_idx, checkIfExists: true) : NO_DBSNP_IDX
+    dbsnp    = params.dbsnp     ? file(params.dbsnp,     checkIfExists: true) : NO_FILE
+    dbsnpIdx = params.dbsnp_idx ? file(params.dbsnp_idx, checkIfExists: true) : NO_FILE
 
-    cosmic    = params.cosmic     ? file(params.cosmic,     checkIfExists: true) : NO_COSMIC
-    cosmicIdx = params.cosmic_idx ? file(params.cosmic_idx, checkIfExists: true) : NO_COSMIC_IDX
+    cosmic    = params.cosmic     ? file(params.cosmic,     checkIfExists: true) : NO_FILE
+    cosmicIdx = params.cosmic_idx ? file(params.cosmic_idx, checkIfExists: true) : NO_FILE
 
-    rgBlacklist = params.read_group_blacklist ? file(params.read_group_blacklist, checkIfExists: true) : NO_RG_BLACKLIST
+    rgBlacklist = params.read_group_blacklist ? file(params.read_group_blacklist, checkIfExists: true) : NO_FILE
 
-    normalPanel    = params.normal_panel     ? file(params.normal_panel,     checkIfExists: true) : NO_NORMAL_PANEL
-    normalPanelIdx = params.normal_panel_idx ? file(params.normal_panel_idx, checkIfExists: true) : NO_NORMAL_PANEL_IDX
+    normalPanel    = params.normal_panel     ? file(params.normal_panel,     checkIfExists: true) : NO_FILE
+    normalPanelIdx = params.normal_panel_idx ? file(params.normal_panel_idx, checkIfExists: true) : NO_FILE
 
     // -----------------------------------------------------------------------
     // Resolve raw normal + raw tumor paths (no processes called yet)
@@ -860,7 +848,7 @@ workflow {
         snp6Bed =
             params.snp6_bed
                 ? file(params.snp6_bed, checkIfExists: true)
-                : NO_SNP6_BED
+                : NO_FILE
 
         CONTEST(
             runs_ch,

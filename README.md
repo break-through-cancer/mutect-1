@@ -75,8 +75,8 @@ main.nf          all processes + the workflow block
 nextflow.config  container/resource-label defaults, local/awsbatch profiles
 preprocess.py    Cirro dataset preprocessing hook -- discovers tumor BAMs +
                  the one shared normal BAM, injects params.mutect1_runs
-assets/NO_FILE   empty sentinel for optional file inputs (self-provisioned
-                 at pipeline start, same as your NO_PON_VCF/NO_ALLELES_VCF)
+assets/          split_intervals.py (optional file inputs use an empty list
+                 `[]` rather than sentinel files -- nothing is staged to S3)
 ```
 
 **Obsolete, left in place:** `bin/prepare_samplesheet.py` and
