@@ -771,7 +771,81 @@ workflow {
     target_list = use_force_calling_intervals ? file(params.force_calling_intervals) :
                   (params.target_list ? file(params.target_list, checkIfExists: true) : NO_FILE)
 
-    dbsnp    = params.dbsnp     ? file(params.dbsnp,     checkIfExists: true) : NO_FILE
+    // -----------------------------------------------------------------------
+    // Validate optional file inputs
+    // -----------------------------------------------------------------------
+    // Optional file fields in the launch form have been pre-filled with unrelated
+    // paths (a BAM as force_calling_intervals, an interval list as normal_panel).
+    // Fail up front with a clear message rather than hitting an input file name
+    // collision mid-run, or silently handing MuTect1 the wrong kind of file.
+
+    expected_exts = [
+        target_list      : ['.bed', '.interval_list', '.intervals'],
+        dbsnp            : ['.vcf', '.vcf.gz'],
+        cosmic           : ['.vcf', '.vcf.gz'],
+        normal_panel     : ['.vcf', '.vcf.gz'],
+        dbsnp_idx        : ['.idx', '.tbi'],
+        cosmic_idx       : ['.idx', '.tbi'],
+        normal_panel_idx : ['.idx', '.tbi']
+    ]
+    // Only checked when it is actually used (see above)
+    if (use_force_calling_intervals) {
+        expected_exts.force_calling_intervals = ['.interval_list']
+    }
+
+    expected_exts.each { param_name, exts ->
+        value = params[param_name]
+        if (value && !exts.any { value.toString().toLowerCase().endsWith(it) }) {
+            error "Parameter ${param_name} must end in one of ${exts}, got: ${value}. " +
+                  "Clear this field if you do not need it."
+        }
+    }
+
+    // No fixed format for the read-group blacklist, so reject known-wrong file types
+    wrong_blacklist_exts = ['.bam', '.bai', '.cram', '.crai', '.vcf', '.vcf.gz', '.interval_list',
+                            '.bed', '.fasta', '.fa', '.fai', '.dict']
+    if (params.read_group_blacklist &&
+        wrong_blacklist_exts.any { params.read_group_blacklist.toString().toLowerCase().endsWith(it) }) {
+        error "Parameter read_group_blacklist looks like the wrong file type, got: ${params.read_group_blacklist}. " +
+              "Clear this field if you do not need it."
+    }
+
+    // Files staged into the same task must have distinct names. Check the shared
+    // inputs plus each run's own BAMs, since those are staged together.
+    fixed_inputs = [
+        target_list      : use_force_calling_intervals ? params.force_calling_intervals : params.target_list,
+        ref_fasta        : params.ref_fasta,
+        ref_fai          : params.ref_fai,
+        ref_dict         : params.ref_dict,
+        dbsnp            : params.dbsnp,
+        dbsnp_idx        : params.dbsnp_idx,
+        cosmic           : params.cosmic,
+        cosmic_idx       : params.cosmic_idx,
+        read_group_blacklist : params.read_group_blacklist,
+        normal_panel     : params.normal_panel,
+        normal_panel_idx : params.normal_panel_idx
+    ]
+
+    params.mutect1_runs.each { run ->
+        staged = fixed_inputs.collect { label, path -> [label, path] } + [
+            ["${run.output_prefix} tumor_reads",         run.tumor_reads],
+            ["${run.output_prefix} tumor_reads_index",   run.tumor_reads_index],
+            ["${run.output_prefix} normal_reads",        run.normal_reads],
+            ["${run.output_prefix} normal_reads_index",  run.normal_reads_index]
+        ]
+        staged
+            .findAll { label, path -> path }
+            .groupBy { label, path -> path.toString().tokenize('/').last() }
+            .each { file_name, entries ->
+                if (entries.size() > 1) {
+                    error "Input file name collision: ${file_name} is used by " +
+                          "${entries.collect { it[0] }.join(', ')}. " +
+                          "Check for a launch-form field filled with the wrong file."
+                }
+            }
+    }
+
+    dbsnp    = params.dbsnp    ? file(params.dbsnp,     checkIfExists: true) : NO_FILE
     dbsnpIdx = params.dbsnp_idx ? file(params.dbsnp_idx, checkIfExists: true) : NO_FILE
 
     cosmic    = params.cosmic     ? file(params.cosmic,     checkIfExists: true) : NO_FILE
