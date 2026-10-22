@@ -765,8 +765,10 @@ workflow {
     ref_fai   = file(params.ref_fai,   checkIfExists: true)
     ref_dict  = file(params.ref_dict,  checkIfExists: true)
 
-    // Use force_calling_intervals if provided, otherwise use target_list (or neither for genome-wide)
-    target_list = params.force_calling_intervals ? file(params.force_calling_intervals) :
+    // force_calling_intervals only replaces target_list when force calling is explicitly
+    // enabled; otherwise use target_list (or neither for genome-wide)
+    use_force_calling_intervals = params.force_calling.toString() == 'true' && params.force_calling_intervals
+    target_list = use_force_calling_intervals ? file(params.force_calling_intervals) :
                   (params.target_list ? file(params.target_list, checkIfExists: true) : NO_FILE)
 
     dbsnp    = params.dbsnp     ? file(params.dbsnp,     checkIfExists: true) : NO_FILE
