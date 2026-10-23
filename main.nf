@@ -509,7 +509,11 @@ process GATHER_AND_FILTER {
     label 'process_medium'
     container "ghcr.io/jchen1095/mutect_1_getzlab:v36"
 
-    publishDir "${params.outdir}/${pairName}", mode: 'copy'
+    // The PASS VCF is published as <pair>.mutect1.pass.vcf so downstream tools such as
+    // consensus-calling can identify the caller by filename. saveAs only changes the
+    // published copy; it is not part of the task cache key.
+    publishDir "${params.outdir}/${pairName}", mode: 'copy',
+        saveAs: { fn -> fn == "${pairName}.MuTect1.PASS.vcf" ? "${pairName}.mutect1.pass.vcf" : fn }
 
     errorStrategy 'retry'
     maxRetries 2
