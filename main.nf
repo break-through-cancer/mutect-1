@@ -458,7 +458,7 @@ process MUTECT1 {
     fi
 
     if [ "!{params.force_calling}" == "true" ]; then
-        extra_args="$extra_args --force_output"
+        extra_args="$extra_args --force_output --force_alleles"
     fi
 
     if [ "!{params.exclude_chimeric}" == "true" ]; then
