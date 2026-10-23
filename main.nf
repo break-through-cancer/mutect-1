@@ -509,7 +509,11 @@ process GATHER_AND_FILTER {
     label 'process_medium'
     container "ghcr.io/jchen1095/mutect_1_getzlab:v36"
 
-    publishDir "${params.outdir}/${pairName}", mode: 'copy'
+    // The PASS VCF is published as <pair>.mutect1.pass.vcf so downstream tools such as
+    // consensus-calling can identify the caller by filename. saveAs only changes the
+    // published copy; it is not part of the task cache key.
+    publishDir "${params.outdir}/${pairName}", mode: 'copy',
+        saveAs: { fn -> fn == "${pairName}.MuTect1.PASS.vcf" ? "${pairName}.mutect1.pass.vcf" : fn }
 
     errorStrategy 'retry'
     maxRetries 2
@@ -618,10 +622,6 @@ process BGZIP_AND_INDEX_VCF {
     tag "${pairName}"
     label 'process_low'
     container 'quay.io/biocontainers/bcftools:1.20--h8b25389_0'
-    // Publish a bgzipped, indexed PASS VCF named <pair>.mutect1.vcf.gz so downstream
-    // tools such as consensus-calling can tell the caller by filename.
-    publishDir "${params.outdir}/${pairName}", mode: 'copy',
-        saveAs: { fn -> fn.replace("${pairName}.filtered.", "${pairName}.mutect1.") }
     errorStrategy 'retry'
     maxRetries 2
 
@@ -1062,23 +1062,19 @@ workflow {
     )
 
     // -----------------------------------------------------------------------
-    // bgzip + index each sample's PASS VCF (published as <pair>.mutect1.vcf.gz)
-    // -----------------------------------------------------------------------
-
-    per_sample_pass_vcfs =
-        GATHER_AND_FILTER
-            .out
-            .pass_vcf_getzlab
-            .map { vcf -> tuple(vcf.baseName.replaceAll(/\.MuTect1\.PASS$/, ''), vcf) }
-
-    BGZIP_AND_INDEX_VCF(per_sample_pass_vcfs)
-
-    // -----------------------------------------------------------------------
     // Merge per-sample PASS VCFs, then derive a force-calling interval list
     // -- only runs when explicitly enabled via params.make_force_calling_intervals
     // -----------------------------------------------------------------------
 
     if (params.make_force_calling_intervals) {
+
+        per_sample_pass_vcfs =
+            GATHER_AND_FILTER
+                .out
+                .pass_vcf_getzlab
+                .map { vcf -> tuple(vcf.baseName.replaceAll(/\.MuTect1\.PASS$/, ''), vcf) }
+
+        BGZIP_AND_INDEX_VCF(per_sample_pass_vcfs)
 
         gz_vcfs_ch =
             BGZIP_AND_INDEX_VCF
